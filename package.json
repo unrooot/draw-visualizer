@@ -1,0 +1,19 @@
+{
+    "name": "draw-visualizer",
+    "version": "1.0.0",
+    "description": "Draw visualizer plugin for Roblox Studio.",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/unrooot/draw-visualizer.git"
+    },
+    "bugs": {
+        "url": "https://github.com/unrooot/draw-visualizer/issues"
+    },
+    "author": "unrooot",
+    "license": "UNLICENSED",
+    "dependencies": {
+        "@quenty/blend": "^5.1.0",
+        "@quenty/loader": "^5.0.1",
+        "@quenty/maid": "^2.4.0"
+    }
+}

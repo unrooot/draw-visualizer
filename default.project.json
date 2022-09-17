@@ -1,0 +1,12 @@
+{
+	"name": "draw-visualizer",
+	"tree": {
+		"$className": "DataModel",
+		"ServerScriptService": {
+			"$className": "ServerScriptService",
+			"draw-visualizer": {
+				"$path": "src"
+			}
+		}
+	}
+}

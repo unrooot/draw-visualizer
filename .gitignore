@@ -1,0 +1,7 @@
+*.rbxl.lock
+node_modules
+out
+roblox.toml
+roblox.yml
+.env
+build

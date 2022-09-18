@@ -5,3 +5,4 @@ roblox.toml
 roblox.yml
 .env
 build
+.DS_STORE

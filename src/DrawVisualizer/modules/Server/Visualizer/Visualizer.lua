@@ -1,6 +1,8 @@
 local require = require(script.Parent.loader).load(script)
 
 local CoreGui = game:GetService("CoreGui")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local Selection = game:GetService("Selection")
 local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
@@ -8,6 +10,7 @@ local UserInputService = game:GetService("UserInputService")
 local BasicPane = require("BasicPane")
 local Blend = require("Blend")
 local Maid = require("Maid")
+local PlayerGuiUtils = require("PlayerGuiUtils")
 local Rx = require("Rx")
 local ValueObject = require("ValueObject")
 local VisualizerHeader = require("VisualizerHeader")
@@ -142,7 +145,16 @@ end
 function Visualizer:_updateTarget()
 	if self._targetSearchEnabled.Value then
 		local location = UserInputService:GetMouseLocation()
-		local guis = StarterGui:GetGuiObjectsAtPosition(location.X, location.Y)
+		local guis = StarterGui
+
+		if RunService:IsRunning() then
+			local playerGui = PlayerGuiUtils.getPlayerGui()
+			if playerGui then
+				guis = playerGui
+			end
+		end
+
+		guis = guis:GetGuiObjectsAtPosition(location.X, location.Y)
 
 		if guis and #guis > 0 then
 			self._hoverTarget.Value = guis[1]

@@ -5,6 +5,8 @@ Roblox plugin heavily inspired by the [osu!framework draw visualizer](https://gi
 
 
 ### recent demo (very buggy):
-https://user-images.githubusercontent.com/64768843/190930326-ae1e1465-a584-4c57-9b87-9c47094b18a3.mp4
+https://user-images.githubusercontent.com/64768843/191028033-9112289f-b8bc-4541-9a8b-a713ff0dc80d.mp4
+
+
 
 UI is written in [Blend](https://quenty.github.io/NevermoreEngine/api/Blend) (included in Quenty's [NevermoreEngine](https://github.com/Quenty/NevermoreEngine))

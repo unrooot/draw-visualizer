@@ -1,10 +1,12 @@
 local require = require(script.Parent.loader).load(script)
 
 local BasicPane = require("BasicPane")
+local BasicPaneUtils = require("BasicPaneUtils")
 local Blend = require("Blend")
+local Maid = require("Maid")
 local Rx = require("Rx")
+local Signal = require("Signal")
 local Table = require("Table")
-local UIPaddingUtils = require("UIPaddingUtils")
 local ValueObject = require("ValueObject")
 
 local VisualizerListView = setmetatable({}, BasicPane)
@@ -22,6 +24,9 @@ function VisualizerListView.new()
 
 	self._absoluteSize = ValueObject.new(Vector2.new())
 	self._maid:GiveTask(self._absoluteSize)
+
+	self.InstanceHovered = Signal.new()
+	self._maid:GiveTask(self.InstanceHovered)
 
 	self._groups = {}
 	self._groupMap = {}
@@ -41,10 +46,17 @@ function VisualizerListView:AddInstanceGroup(instanceGroup)
 		return
 	end
 
+	local maid = Maid.new()
+
+	maid:GiveTask(instanceGroup)
+	maid:GiveTask(instanceGroup.InstanceHovered:Connect(function(instance: Instance?)
+		self.InstanceHovered:Fire(instance)
+	end))
+
 	table.insert(self._groups, instanceGroup)
 	instanceGroup:SetLayoutOrder(#self._groups)
 
-	self._maid[instanceGroup] = instanceGroup
+	self._maid[instanceGroup] = maid
 	self._groupMap[instanceGroup] = true
 	self._groupObjects.Value = Table.copy(self._groupMap)
 
@@ -113,6 +125,7 @@ function VisualizerListView:Render(props)
 				ScrollBarImageTransparency = transparency;
 				ScrollBarThickness = 10;
 				ScrollingDirection = Enum.ScrollingDirection.Y;
+				ScrollingEnabled = BasicPaneUtils.observeVisible(self);
 				Size = UDim2.fromScale(1, 1);
 				TopImage = scrollBarImage;
 				VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar;
@@ -122,20 +135,20 @@ function VisualizerListView:Render(props)
 				end;
 
 				CanvasSize = Blend.Computed(self._contentHeight, function(height: number)
-					return UDim2.fromOffset(0, height)
+					return UDim2.fromOffset(0, height + 30)
 				end);
 
 				[Blend.Children] = {
 					Blend.New "UIPadding" {
-						PaddingLeft = UDim.new(0, 15);
-						PaddingTop = UDim.new(0, 15);
-						PaddingBottom = UDim.new(0, 15);
+						PaddingLeft = UDim.new(0, 10);
+						PaddingTop = UDim.new(0, 10);
+						PaddingBottom = UDim.new(0, 10);
 
 						PaddingRight = Blend.Computed(self._contentHeight, function(height: number)
 							local size = self._absoluteSize.Value
 
 							if height > size.Y then
-								return UDim.new(15 / size.X, 0)
+								return UDim.new(10 / size.X, 0)
 							else
 								return UDim.new(0, 15)
 							end

@@ -3,8 +3,6 @@ local loader = script.Parent:FindFirstChild("LoaderUtils", true).Parent
 
 local require = require(loader).bootstrapPlugin(modules)
 
-local Selection = game:GetService("Selection")
-
 local Maid = require("Maid")
 local Visualizer = require("Visualizer")
 local VisualizerConstants = require("VisualizerConstants")
@@ -14,13 +12,6 @@ local function renderPane(plugin, target)
 
 	local pane = Visualizer.new()
 	maid:GiveTask(pane)
-
-	pane:SetRootInstance(Selection:Get()[1])
-
-	maid:GiveTask(Selection.SelectionChanged:Connect(function()
-		pane:SetRootInstance(Selection:Get()[1])
-	end))
-
 	maid:GiveTask(pane:Render({
 		Parent = target;
 	}):Subscribe())

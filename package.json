@@ -15,6 +15,7 @@
         "@quenty/basicpane": "^6.1.0",
         "@quenty/blend": "^5.1.0",
         "@quenty/buttonhighlightmodel": "^6.1.0",
+        "@quenty/instanceutils": "^6.1.0",
         "@quenty/loader": "^5.0.1",
         "@quenty/maid": "^2.4.0",
         "@quenty/math": "^2.2.0",

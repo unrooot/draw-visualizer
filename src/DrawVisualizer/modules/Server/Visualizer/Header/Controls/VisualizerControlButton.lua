@@ -1,6 +1,7 @@
 local require = require(script.Parent.loader).load(script)
 
 local BasicPane = require("BasicPane")
+local BasicPaneUtils = require("BasicPaneUtils")
 local Blend = require("Blend")
 local ButtonHighlightModel = require("ButtonHighlightModel")
 local Rx = require("Rx")
@@ -15,7 +16,7 @@ VisualizerControlButton.__index = VisualizerControlButton
 function VisualizerControlButton.new(buttonName: string)
 	local self = setmetatable(BasicPane.new(), VisualizerControlButton)
 
-	self._buttonName = assert(buttonName, "[VisualizerControlButton]: Must provide a button name!")
+	self.ButtonName = assert(buttonName, "[VisualizerControlButton]: Must provide a button name!")
 
 	self.Activated = Signal.new()
 	self._maid:GiveTask(self.Activated)
@@ -23,20 +24,22 @@ function VisualizerControlButton.new(buttonName: string)
 	self._percentVisibleTarget = ValueObject.new(0)
 	self._maid:GiveTask(self._percentVisibleTarget)
 
+	self._isChoosen = ValueObject.new(false)
+	self._maid:GiveTask(self._isChoosen)
+	self._maid:GiveTask(self._isChoosen.Changed:Connect(function()
+		self._buttonModel:SetIsChoosen(self._isChoosen.Value)
+	end))
+
 	self._text = ValueObject.new("")
 	self._maid:GiveTask(self._text)
 
 	self._layoutOrder = ValueObject.new(1)
 	self._maid:GiveTask(self._layoutOrder)
 
-	self._isVisible = ValueObject.new(self:IsVisible())
-	self._maid:GiveTask(self._isVisible)
-
 	self._buttonModel = ButtonHighlightModel.new()
 	self._maid:GiveTask(self._buttonModel)
 
 	self._maid:GiveTask(self.VisibleChanged:Connect(function(isVisible)
-		self._isVisible.Value = isVisible
 		self._percentVisibleTarget.Value = isVisible and 1 or 0
 	end))
 
@@ -49,6 +52,10 @@ end
 
 function VisualizerControlButton:SetText(text: string)
 	self._text.Value = text
+end
+
+function VisualizerControlButton:SetIsChoosen(isChoosen: boolean)
+	self._isChoosen.Value = isChoosen
 end
 
 function VisualizerControlButton:SetToggleBehavior(isTogglable: boolean)
@@ -97,15 +104,11 @@ function VisualizerControlButton:Render(props)
 				BackgroundTransparency = 1;
 				Size = UDim2.fromScale(1, 1);
 				Text = "";
-				Visible = self._isVisible;
+				Visible = BasicPaneUtils.observeVisible(self);
 				ZIndex = 5;
 
 				[Blend.OnEvent "Activated"] = function()
-					self.Activated:Fire(self._buttonName)
-
-					if self._isTogglable then
-						self._buttonModel:SetIsChoosen(not self._buttonModel.IsChoosen.Value)
-					end
+					self.Activated:Fire(self.ButtonName, self)
 				end;
 
 				[Blend.Instance] = function(button)

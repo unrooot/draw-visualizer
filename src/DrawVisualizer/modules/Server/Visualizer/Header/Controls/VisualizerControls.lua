@@ -3,6 +3,7 @@ local require = require(script.Parent.loader).load(script)
 local BasicPane = require("BasicPane")
 local Blend = require("Blend")
 local Rx = require("Rx")
+local Signal = require("Signal")
 local Table = require("Table")
 local ValueObject = require("ValueObject")
 local VisualizerControlButton = require("VisualizerControlButton")
@@ -16,6 +17,9 @@ function VisualizerControls.new()
 
 	self._percentVisibleTarget = ValueObject.new(0)
 	self._maid:GiveTask(self._percentVisibleTarget)
+
+	self.ButtonActivated = Signal.new()
+	self._maid:GiveTask(self.ButtonActivated)
 
 	self._maid:GiveTask(self.VisibleChanged:Connect(function(isVisible)
 		self._percentVisibleTarget.Value = isVisible and 1 or 0
@@ -34,17 +38,26 @@ function VisualizerControls:_createButtons()
 	self._targetButton:SetText("choose target")
 	self._targetButton:SetToggleBehavior(true)
 	self._maid:GiveTask(self._targetButton)
+	self._maid:GiveTask(self._targetButton.Activated:Connect(function(...)
+		self.ButtonActivated:Fire(...)
+	end))
 
 	self._parentButton = VisualizerControlButton.new("parent")
 	self._parentButton:SetLayoutOrder(2)
 	self._parentButton:SetText("up one parent")
-	self._maid:GiveTask(self._targetButton)
+	self._maid:GiveTask(self._parentButton)
+	self._maid:GiveTask(self._parentButton.Activated:Connect(function(...)
+		self.ButtonActivated:Fire(...)
+	end))
 
 	self._propertiesButton = VisualizerControlButton.new("properties")
 	self._propertiesButton:SetLayoutOrder(3)
 	self._propertiesButton:SetText("view properties")
 	self._propertiesButton:SetToggleBehavior(true)
-	self._maid:GiveTask(self._targetButton)
+	self._maid:GiveTask(self._propertiesButton)
+	self._maid:GiveTask(self._propertiesButton.Activated:Connect(function(...)
+		self.ButtonActivated:Fire(...)
+	end))
 
 	self._buttons[self._targetButton] = true
 	self._buttons[self._parentButton] = true

@@ -20,6 +20,8 @@ function VisualizerHeader.new()
 	self._buttons = VisualizerControls.new()
 	self._maid:GiveTask(self._buttons)
 
+	self.ButtonActivated = self._buttons.ButtonActivated
+
 	self._maid:GiveTask(self.VisibleChanged:Connect(function(isVisible, doNotAnimate)
 		self._percentVisibleTarget.Value = isVisible and 1 or 0
 		self._buttons:SetVisible(isVisible, doNotAnimate)

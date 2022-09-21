@@ -137,7 +137,7 @@ function VisualizerControlButton:Render(props)
 
 					Blend.New "TextLabel" {
 						BackgroundTransparency = 1;
-						Font = Enum.Font.GothamMedium;
+						FontFace = Font.new("rbxasset://fonts/families/Inconsolata.json", Enum.FontWeight.Medium, Enum.FontStyle.Normal);
 						Size = UDim2.fromScale(1, 1);
 						Text = self._text;
 						TextColor3 = Color3.new(1, 1, 1);

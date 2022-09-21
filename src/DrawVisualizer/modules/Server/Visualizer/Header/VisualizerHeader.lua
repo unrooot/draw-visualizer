@@ -66,7 +66,7 @@ function VisualizerHeader:Render(props)
 						Name = "label";
 						AnchorPoint = Vector2.new(0.5, 0.5);
 						BackgroundTransparency = 1;
-						Font = Enum.Font.GothamBold;
+						FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.ExtraBold, Enum.FontStyle.Normal);
 						Position = UDim2.fromScale(0.5, 0.5);
 						Size = UDim2.fromScale(1, 1);
 						Text = "draw visualizer";

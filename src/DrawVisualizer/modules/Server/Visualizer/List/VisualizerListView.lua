@@ -28,6 +28,12 @@ function VisualizerListView.new()
 	self.InstanceHovered = Signal.new()
 	self._maid:GiveTask(self.InstanceHovered)
 
+	self.InstancePicked = Signal.new()
+	self._maid:GiveTask(self.InstancePicked)
+
+	self.InstanceInspected = Signal.new()
+	self._maid:GiveTask(self.InstanceInspected)
+
 	self._groups = {}
 	self._groupMap = {}
 
@@ -49,6 +55,15 @@ function VisualizerListView:AddInstanceGroup(instanceGroup)
 	local maid = Maid.new()
 
 	maid:GiveTask(instanceGroup)
+
+	maid:GiveTask(instanceGroup.InstancePicked:Connect(function(instance: Instance?)
+		self.InstancePicked:Fire(instance)
+	end))
+
+	maid:GiveTask(instanceGroup.InstanceInspected:Connect(function(instance: Instance?)
+		self.InstanceInspected:Fire(instance)
+	end))
+
 	maid:GiveTask(instanceGroup.InstanceHovered:Connect(function(instance: Instance?)
 		self.InstanceHovered:Fire(instance)
 	end))

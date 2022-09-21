@@ -10,9 +10,10 @@ local RxInstanceUtils = require("RxInstanceUtils")
 local Signal = require("Signal")
 local Table = require("Table")
 local ValueObject = require("ValueObject")
+local VisualizerConstants = require("VisualizerConstants")
 local VisualizerInstanceEntry = require("VisualizerInstanceEntry")
 
-local MAX_DEPTH_SIZE = 150
+local MAX_DEPTH_SIZE = VisualizerConstants.MAX_DEPTH_SIZE
 
 local VisualizerInstanceGroup = setmetatable({}, BasicPane)
 VisualizerInstanceGroup.ClassName = "VisualizerInstanceGroup"
@@ -57,6 +58,12 @@ function VisualizerInstanceGroup.new(rootInstance: Instance, startingDepth: numb
 
 	self.InstanceHovered = Signal.new()
 	self._maid:GiveTask(self.InstanceHovered)
+
+	self.InstancePicked = Signal.new()
+	self._maid:GiveTask(self.InstancePicked)
+
+	self.InstanceInspected = Signal.new()
+	self._maid:GiveTask(self.InstanceInspected)
 
 	self:_observeDescendants(rootInstance)
 
@@ -112,6 +119,14 @@ function VisualizerInstanceGroup:AddObject(instanceObject: table, depth: number)
 	maid:GiveTask(instanceObject)
 
 	if className == "VisualizerInstanceEntry" then
+		maid:GiveTask(instanceObject.InstancePicked:Connect(function(pickedInstance)
+			self.InstancePicked:Fire(pickedInstance)
+		end))
+
+		maid:GiveTask(instanceObject.InstanceInspected:Connect(function(inspectedInstance)
+			self.InstanceInspected:Fire(inspectedInstance)
+		end))
+
 		maid:GiveTask(instanceObject.InstanceHovered:Connect(function(isHovered: boolean)
 			self.InstanceHovered:Fire(isHovered and instanceObject.Instance or nil)
 		end))
@@ -294,6 +309,15 @@ function VisualizerInstanceGroup:_getGroupFromBrio(brio: table, instance: Instan
 	groups[instance] = group
 
 	maid:GiveTask(group)
+
+	maid:GiveTask(group.InstancePicked:Connect(function(pickedInstance: Instance?)
+		self.InstancePicked:Fire(pickedInstance)
+	end))
+
+	maid:GiveTask(group.InstanceInspected:Connect(function(inspectedInstance: Instance?)
+		self.InstanceInspected:Fire(inspectedInstance)
+	end))
+
 	maid:GiveTask(group.InstanceHovered:Connect(function(hoverInstance: Instance?)
 		self.InstanceHovered:Fire(hoverInstance)
 	end))
@@ -332,11 +356,13 @@ function VisualizerInstanceGroup:_createEntry(instance: Instance)
 end
 
 function VisualizerInstanceGroup:_observeDescendants(baseInstance: Instance)
-	if #baseInstance:GetDescendants() >= MAX_DEPTH_SIZE then
-		return warn("[VisualizerInstanceGroup]: Root instance exceeds max depth size!")
+	local descendantCount = #baseInstance:GetDescendants()
+	if descendantCount >= MAX_DEPTH_SIZE then
+		return warn(string.format("[VisualizerInstanceGroup]: Root instance exceeds max depth size (%d)!", descendantCount))
 	end
 
-	self:AddObject(self:_createEntry(baseInstance), self._startingDepth)
+	self.RootEntry = self:_createEntry(baseInstance)
+	self:AddObject(self.RootEntry, self._startingDepth)
 
 	self._maid._current = RxInstanceUtils.observeChildrenBrio(baseInstance, self._predicate):Subscribe(function(brio: table)
 		if brio:IsDead() then

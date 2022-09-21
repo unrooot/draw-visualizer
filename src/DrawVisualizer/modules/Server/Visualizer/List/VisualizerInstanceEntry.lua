@@ -67,6 +67,12 @@ function VisualizerInstanceEntry.new()
 	self.InstanceHovered = Signal.new()
 	self._maid:GiveTask(self.InstanceHovered)
 
+	self.InstancePicked = Signal.new()
+	self._maid:GiveTask(self.InstancePicked)
+
+	self.InstanceInspected = Signal.new()
+	self._maid:GiveTask(self.InstanceInspected)
+
 	self._buttonModel = ButtonHighlightModel.new()
 	self._maid:GiveTask(self._buttonModel)
 	self._maid:GiveTask(self._buttonModel.IsHighlighted.Changed:Connect(function()
@@ -280,6 +286,14 @@ function VisualizerInstanceEntry:Render(props)
 
 						[Blend.OnEvent "Activated"] = function()
 							self.Activated:Fire()
+						end;
+
+						[Blend.OnEvent "InputBegan"] = function(input)
+							if input.UserInputType == Enum.UserInputType.MouseButton2 then
+								self.InstanceInspected:Fire(self.Instance)
+							elseif input.UserInputType == Enum.UserInputType.MouseButton3 then
+								self.InstancePicked:Fire(self.Instance)
+							end
 						end;
 
 						[Blend.Instance] = function(button)

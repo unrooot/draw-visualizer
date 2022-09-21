@@ -26,8 +26,14 @@ function Visualizer.new()
 
 	self:_createScreenGui()
 
+	self._propertiesVisible = ValueObject.new(false)
+	self._maid:GiveTask(self._propertiesVisible)
+
 	self._percentVisibleTarget = ValueObject.new(0)
 	self._maid:GiveTask(self._percentVisibleTarget)
+
+	self._propertiesVisibleTarget = ValueObject.new(0)
+	self._maid:GiveTask(self._propertiesVisibleTarget)
 
 	self._absoluteSize = ValueObject.new(Vector2.new())
 	self._maid:GiveTask(self._absoluteSize)
@@ -76,6 +82,15 @@ function Visualizer.new()
 
 	self._list = VisualizerListView.new()
 	self._maid:GiveTask(self._list)
+
+	self._maid:GiveTask(self._list.InstancePicked:Connect(function(instance: Instance?)
+		self:SetRootInstance(instance)
+	end))
+
+	self._maid:GiveTask(self._list.InstanceInspected:Connect(function(instance: Instance?)
+		self:InspectInstance(instance)
+	end))
+
 	self._maid:GiveTask(self._list.InstanceHovered:Connect(function(instance: Instance?)
 		self:_flashInstance(instance)
 	end))
@@ -101,8 +116,19 @@ function Visualizer:SetRootInstance(instance: Instance)
 	end
 end
 
+function Visualizer:InspectInstance(instance: Instance?)
+	print("inspecting", instance)
+
+	self._propertiesVisible.Value = not self._propertiesVisible.Value
+	self._propertiesVisibleTarget.Value = self._propertiesVisible.Value and 1 or 0
+end
+
 function Visualizer:Render(props)
 	local percentVisible = Blend.Spring(Blend.toPropertyObservable(self._percentVisibleTarget):Pipe({
+		Rx.startWith({0})
+	}), 30, 0.9)
+
+	local percentPropertiesVisible = Blend.Spring(Blend.toPropertyObservable(self._propertiesVisibleTarget):Pipe({
 		Rx.startWith({0})
 	}), 30, 0.9)
 
@@ -120,15 +146,27 @@ function Visualizer:Render(props)
 		[Blend.OnChange "AbsoluteSize"] = self._absoluteSize;
 
 		[Blend.Children] = {
-			self._header:Render({
-				AbsoluteRootSize = self._absoluteSize;
-				Parent = props.Parent;
-			});
+			Blend.New "Frame" {
+				Name = "body";
+				BackgroundTransparency = 1;
+				Size = UDim2.fromScale(1, 1);
 
-			self._list:Render({
-				AbsoluteRootSize = self._absoluteSize;
-				Parent = props.Parent;
-			})
+				Position = Blend.Computed(percentPropertiesVisible, function(percent)
+					return UDim2.fromScale(-percent, 0)
+				end);
+
+				[Blend.Children] = {
+					self._header:Render({
+						AbsoluteRootSize = self._absoluteSize;
+						Parent = props.Parent;
+					});
+
+					self._list:Render({
+						AbsoluteRootSize = self._absoluteSize;
+						Parent = props.Parent;
+					})
+				};
+			};
 		};
 	};
 end
@@ -212,8 +250,10 @@ function Visualizer:_updateRootInstance()
 	end
 
 	local group = VisualizerInstanceGroup.new(self._rootInstance.Value)
+	local rootEntry = group.RootEntry
 
 	self._list:AddInstanceGroup(group)
+	self:_flashInstance(rootEntry.Instance)
 
 	self._maid._current = function()
 		if self._list and self._list.RemoveInstanceGroup then
@@ -245,6 +285,8 @@ function Visualizer:_listenForInput()
 			if input.KeyCode == Enum.KeyCode.Escape then
 				if self._targetSearchEnabled.Value then
 					self._targetSearchEnabled.Value = false
+				elseif self._propertiesVisible.Value then
+					self._propertiesVisible.Value = false
 				end
 			end
 		end

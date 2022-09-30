@@ -6,11 +6,9 @@ local Maid = require("Maid")
 local Visualizer = require("Visualizer")
 
 return function(target)
-	target.Parent.Parent.Parent.BackgroundColor3 = Color3.fromRGB(75, 75, 75)
-
 	local maid = Maid.new()
 
-	local pane = Visualizer.new()
+	local pane = Visualizer.new(true)
 	maid:GiveTask(pane)
 	maid:GiveTask(pane:Render({
 		Parent = target;

@@ -21,7 +21,7 @@ local Visualizer = setmetatable({}, BasicPane)
 Visualizer.ClassName = "Visualizer"
 Visualizer.__index = Visualizer
 
-function Visualizer.new()
+function Visualizer.new(isHoarcekat: boolean)
 	local self = setmetatable(BasicPane.new(), Visualizer)
 
 	self:_createScreenGui()
@@ -103,6 +103,10 @@ function Visualizer.new()
 	end))
 
 	self:_listenForInput()
+
+	if not isHoarcekat then
+		self._targetSearchEnabled.Value = true
+	end
 
 	return self
 end

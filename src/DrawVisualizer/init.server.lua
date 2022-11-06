@@ -7,7 +7,9 @@ local Maid = require("Maid")
 local Visualizer = require("Visualizer")
 local VisualizerConstants = require("VisualizerConstants")
 
-local function renderPane(plugin, target)
+local currentPane
+
+local function renderPane(target)
 	local maid = Maid.new()
 
 	local pane = Visualizer.new()
@@ -18,25 +20,43 @@ local function renderPane(plugin, target)
 
 	pane:Show()
 
-	return maid
+	return maid, pane
+end
+
+local function createActions(plugin, target, maid)
+	for key, data in VisualizerConstants.ACTIONS do
+		local macro = plugin:CreatePluginAction(
+			"[Draw Visualizer] " .. data.Name,
+			"[Draw Visualizer] " .. data.Name,
+			data.Description,
+			VisualizerConstants.PLUGIN_ICON,
+			true
+		)
+
+		maid:GiveTask(macro.Triggered:Connect(function()
+			if not data.Action then
+				return warn(string.format("[DrawVisualizer]: Action %q missing action function!", key))
+			end
+
+			if key == "Toggle" then
+				data.Action(target)
+			else
+				data.Action(currentPane)
+			end
+		end))
+	end
 end
 
 local function initialize(plugin)
 	local maid = Maid.new()
 
-	local macro = plugin:CreatePluginAction(
-		VisualizerConstants.ACTION_NAME,
-		VisualizerConstants.ACTION_NAME,
-		VisualizerConstants.ACTION_DESC,
-		VisualizerConstants.PLUGIN_ICON,
-		true
-	)
+	local pluginIcon = VisualizerConstants.PLUGIN_ICON
 
 	local toolbar = plugin:CreateToolbar(VisualizerConstants.TOOLBAR_LABEL)
 	local toggleButton = toolbar:CreateButton(
 		"drawVisualizer",
 		VisualizerConstants.PLUGIN_NAME,
-		VisualizerConstants.PLUGIN_ICON,
+		pluginIcon,
 		VisualizerConstants.PLUGIN_DESC
 	)
 
@@ -44,7 +64,7 @@ local function initialize(plugin)
 
 	local target = plugin:CreateDockWidgetPluginGui(VisualizerConstants.PLUGIN_NAME, info)
 	target.Name = VisualizerConstants.PLUGIN_NAME
-	target.Title = VisualizerConstants.PLUGIN_NAME
+	target.Title = VisualizerConstants.PLUGIN_TITLE
 	target.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 	local function update()
@@ -53,15 +73,17 @@ local function initialize(plugin)
 		toggleButton:SetActive(isEnabled)
 
 		if isEnabled then
-			maid._current = renderPane(plugin, target)
+			local paneMaid, pane = renderPane(target)
+
+			currentPane = pane
+			maid._current = paneMaid
 		else
+			currentPane = nil
 			maid._current = nil
 		end
 	end
 
-	maid:GiveTask(macro.Triggered:Connect(function()
-		target.Enabled = not target.Enabled
-	end))
+	createActions(plugin, target, maid)
 
 	maid:GiveTask(toggleButton.Click:Connect(function()
 		target.Enabled = not target.Enabled

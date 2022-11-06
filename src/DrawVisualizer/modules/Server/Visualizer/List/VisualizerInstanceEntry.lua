@@ -1,6 +1,7 @@
 local require = require(script.Parent.loader).load(script)
 
 local StudioService = game:GetService("StudioService")
+local UserInputService = game:GetService("UserInputService")
 
 local BasicPane = require("BasicPane")
 local BasicPaneUtils = require("BasicPaneUtils")
@@ -284,12 +285,18 @@ function VisualizerInstanceEntry:Render(props)
 						Visible = BasicPaneUtils.observeVisible(self);
 						ZIndex = 5;
 
-						[Blend.OnEvent "Activated"] = function()
-							self.Activated:Fire()
-						end;
-
 						[Blend.OnEvent "InputBegan"] = function(input)
-							if input.UserInputType == Enum.UserInputType.MouseButton2 then
+							if input.UserInputType == Enum.UserInputType.MouseButton1 then
+								local ctrlPressed = false
+
+								for _, inputObject in UserInputService:GetKeysPressed() do
+									if inputObject.KeyCode == Enum.KeyCode.LeftControl then
+										ctrlPressed = true
+									end
+								end
+
+								self.Activated:Fire(ctrlPressed)
+							elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
 								self.InstanceInspected:Fire(self.Instance)
 							elseif input.UserInputType == Enum.UserInputType.MouseButton3 then
 								self.InstancePicked:Fire(self.Instance)

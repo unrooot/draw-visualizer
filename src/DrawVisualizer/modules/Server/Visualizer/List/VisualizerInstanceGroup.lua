@@ -1,5 +1,8 @@
 local require = require(script.Parent.loader).load(script)
 
+local Selection = game:GetService("Selection")
+local UserInputService = game:GetService("UserInputService")
+
 local BasicPane = require("BasicPane")
 local Blend = require("Blend")
 local Brio = require("Brio")
@@ -13,7 +16,7 @@ local ValueObject = require("ValueObject")
 local VisualizerConstants = require("VisualizerConstants")
 local VisualizerInstanceEntry = require("VisualizerInstanceEntry")
 
-local MAX_DEPTH_SIZE = VisualizerConstants.MAX_DEPTH_SIZE
+local MAX_INSTANCE_DEPTH = VisualizerConstants.MAX_INSTANCE_DEPTH
 
 local VisualizerInstanceGroup = setmetatable({}, BasicPane)
 VisualizerInstanceGroup.ClassName = "VisualizerInstanceGroup"
@@ -128,12 +131,24 @@ function VisualizerInstanceGroup:AddObject(instanceObject: table, depth: number)
 		end))
 
 		maid:GiveTask(instanceObject.InstanceHovered:Connect(function(isHovered: boolean)
-			self.InstanceHovered:Fire(isHovered and instanceObject.Instance or nil)
+			for _, inputObject in UserInputService:GetKeysPressed() do
+				if inputObject.KeyCode == Enum.KeyCode.LeftControl then
+					Selection:Set({instance})
+				end
+			end
+
+			self.InstanceHovered:Fire(isHovered and instance or nil)
 		end))
 
-		maid:GiveTask(instanceObject.Activated:Connect(function()
+		maid:GiveTask(instanceObject.Activated:Connect(function(ctrlPressed: boolean)
 			instance = instanceObject.Instance
 			if not instance then
+				return
+			end
+
+			if ctrlPressed then
+				print("YEAAA", ctrlPressed)
+				Selection:Set({instance})
 				return
 			end
 
@@ -341,7 +356,7 @@ function VisualizerInstanceGroup:_getDepth(baseInstance: Instance)
 
 		parent = parent.Parent
 	until
-		parent == root or depth >= MAX_DEPTH_SIZE
+		parent == root or depth >= MAX_INSTANCE_DEPTH
 
 	return depth
 end
@@ -357,7 +372,7 @@ end
 
 function VisualizerInstanceGroup:_observeDescendants(baseInstance: Instance)
 	local descendantCount = #baseInstance:GetDescendants()
-	if descendantCount >= MAX_DEPTH_SIZE then
+	if descendantCount >= MAX_INSTANCE_DEPTH then
 		return warn(string.format("[VisualizerInstanceGroup]: Root instance exceeds max depth size (%d)!", descendantCount))
 	end
 

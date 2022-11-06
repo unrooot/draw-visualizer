@@ -46,7 +46,7 @@ function Visualizer.new(isHoarcekat: boolean)
 			self._targetButton:SetIsChoosen(isEnabled)
 
 			if not isEnabled then
-				self._targetSearchEnabled.Value = false
+				self:SetTargetSearchEnabled(false)
 				self._maid._flash = nil
 			end
 		end
@@ -68,15 +68,13 @@ function Visualizer.new(isHoarcekat: boolean)
 	self._maid:GiveTask(self._header)
 	self._maid:GiveTask(self._header.ButtonActivated:Connect(function(buttonName: string, button: table)
 		if buttonName == "parent" then
-			if self._rootInstance.Value then
-				self:SetRootInstance(self._rootInstance.Value.Parent)
-			end
+			self:_moveUpOneParent()
 		elseif buttonName == "target" then
 			if not self._targetButton then
 				self._targetButton = button
 			end
 
-			self._targetSearchEnabled.Value = not self._targetSearchEnabled.Value
+			self:SetTargetSearchEnabled(not self._targetSearchEnabled.Value)
 		end
 	end))
 
@@ -105,10 +103,14 @@ function Visualizer.new(isHoarcekat: boolean)
 	self:_listenForInput()
 
 	if not isHoarcekat then
-		self._targetSearchEnabled.Value = true
+		self:SetTargetSearchEnabled(true)
 	end
 
 	return self
+end
+
+function Visualizer:SetTargetSearchEnabled(isEnabled: boolean)
+	self._targetSearchEnabled.Value = isEnabled
 end
 
 function Visualizer:SetRootInstance(instance: Instance)
@@ -175,9 +177,19 @@ function Visualizer:Render(props)
 	};
 end
 
-function Visualizer:_selectTarget()
+function Visualizer:_moveUpOneParent()
+	if self._rootInstance.Value then
+		self:SetRootInstance(self._rootInstance.Value.Parent)
+	end
+end
+
+function Visualizer:_selectTarget(ctrlPressed: boolean)
 	if self._targetSearchEnabled.Value then
 		self:SetRootInstance(self._hoverTarget.Value)
+
+		if ctrlPressed then
+			Selection:Set({self._hoverTarget.Value})
+		end
 	end
 
 	self._targetSearchEnabled.Value = false
@@ -284,7 +296,14 @@ function Visualizer:_listenForInput()
 		if input.UserInputType == Enum.UserInputType.MouseMovement then
 			self:_updateTarget()
 		elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
-			self:_selectTarget()
+			local ctrlPressed = false
+			for _, inputObject in UserInputService:GetKeysPressed() do
+				if inputObject.KeyCode == Enum.KeyCode.LeftControl then
+					ctrlPressed = true
+				end
+			end
+
+			self:_selectTarget(ctrlPressed)
 		elseif input.UserInputType == Enum.UserInputType.Keyboard then
 			if input.KeyCode == Enum.KeyCode.Escape then
 				if self._targetSearchEnabled.Value then
@@ -292,6 +311,8 @@ function Visualizer:_listenForInput()
 				elseif self._propertiesVisible.Value then
 					self._propertiesVisible.Value = false
 				end
+			elseif input.KeyCode == Enum.KeyCode.P then
+				self:_moveUpOneParent()
 			end
 		end
 	end))

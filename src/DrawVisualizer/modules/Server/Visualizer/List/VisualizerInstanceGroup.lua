@@ -147,7 +147,6 @@ function VisualizerInstanceGroup:AddObject(instanceObject: table, depth: number)
 			end
 
 			if ctrlPressed then
-				print("YEAAA", ctrlPressed)
 				Selection:Set({instance})
 				return
 			end

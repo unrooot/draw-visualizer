@@ -64,7 +64,7 @@ local function initialize(plugin)
 
 	local target = plugin:CreateDockWidgetPluginGui(VisualizerConstants.PLUGIN_NAME, info)
 	target.Name = VisualizerConstants.PLUGIN_NAME
-	target.Title = VisualizerConstants.PLUGIN_TITLE
+	target.Title = VisualizerConstants.PLUGIN_NAME
 	target.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 	local function update()
@@ -77,6 +77,26 @@ local function initialize(plugin)
 
 			currentPane = pane
 			maid._current = paneMaid
+
+			paneMaid:GiveTask(pane.RootInstance:Observe():Subscribe(function(instance)
+				if not instance then
+					target.Title = VisualizerConstants.PLUGIN_NAME
+				else
+					local count = 0
+
+					for _, descendant in instance:GetDescendants() do
+						if descendant:IsA("GuiObject") then
+							count += 1
+						end
+					end
+
+					if count > 0 then
+						target.Title = `{VisualizerConstants.PLUGIN_NAME} - {instance.Name} ({count})`
+					else
+						target.Title = `{VisualizerConstants.PLUGIN_NAME} - {instance.Name}`
+					end
+				end
+			end))
 		else
 			currentPane = nil
 			maid._current = nil

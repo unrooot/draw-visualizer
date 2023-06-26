@@ -3,7 +3,6 @@ return {
 
 	-- Plugin metadata
 	PLUGIN_ICON = "";
-	PLUGIN_TITLE = "Draw Visualizer - %s (%d)";
 	PLUGIN_NAME = "Draw Visualizer";
 
 	-- General configuration

@@ -1,7 +1,6 @@
 local require = require(script.Parent.loader).load(script)
 
 local CoreGui = game:GetService("CoreGui")
-local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Selection = game:GetService("Selection")
 local StarterGui = game:GetService("StarterGui")
@@ -38,6 +37,21 @@ function Visualizer.new(isHoarcekat: boolean)
 	self._absoluteSize = ValueObject.new(Vector2.new())
 	self._maid:GiveTask(self._absoluteSize)
 
+	self._objectIndex = ValueObject.new(0)
+	self._maid:GiveTask(self._objectIndex)
+	self._maid:GiveTask(self._objectIndex.Changed:Connect(function()
+		local objects = self._currentObjects.Value
+		local index = self._objectIndex.Value
+
+		if not objects or index == 0 then
+			return
+		end
+
+		if objects[index] then
+			self._hoverTarget.Value = objects[index]
+		end
+	end))
+
 	self._targetSearchEnabled = ValueObject.new(false)
 	self._maid:GiveTask(self._targetSearchEnabled)
 	self._maid:GiveTask(self._targetSearchEnabled.Changed:Connect(function()
@@ -52,16 +66,31 @@ function Visualizer.new(isHoarcekat: boolean)
 		end
 	end))
 
-	self._rootInstance = ValueObject.new()
-	self._maid:GiveTask(self._rootInstance)
-	self._maid:GiveTask(self._rootInstance.Changed:Connect(function()
+	self.RootInstance = ValueObject.new()
+	self._maid:GiveTask(self.RootInstance)
+	self._maid:GiveTask(self.RootInstance.Changed:Connect(function()
 		self:_updateRootInstance()
 	end))
 
-	self._hoverTarget = ValueObject.new(self._rootInstance.Value)
+	self._hoverTarget = ValueObject.new(self.RootInstance.Value)
 	self._maid:GiveTask(self._hoverTarget)
 	self._maid:GiveTask(self._hoverTarget.Changed:Connect(function()
 		self:_flashInstance(self._hoverTarget.Value)
+	end))
+
+	self._currentObjects = ValueObject.new(nil)
+	self._maid:GiveTask(self._currentObjects:Observe():Subscribe(function(objects)
+		if not objects then
+			self._objectIndex.Value = 0
+			return
+		elseif self._objectIndex.Value == 0 then
+			self._objectIndex.Value = 1
+		end
+
+		local index = self._objectIndex.Value
+		if objects[index] then
+			self._hoverTarget.Value = objects[index]
+		end
 	end))
 
 	self._header = VisualizerHeader.new()
@@ -114,7 +143,7 @@ function Visualizer:SetTargetSearchEnabled(isEnabled: boolean)
 end
 
 function Visualizer:SetRootInstance(instance: Instance)
-	self._rootInstance.Value = instance
+	self.RootInstance.Value = instance
 
 	if not instance then
 		self._maid._current = nil
@@ -178,8 +207,8 @@ function Visualizer:Render(props)
 end
 
 function Visualizer:_moveUpOneParent()
-	if self._rootInstance.Value then
-		self:SetRootInstance(self._rootInstance.Value.Parent)
+	if self.RootInstance.Value then
+		self:SetRootInstance(self.RootInstance.Value.Parent)
 	end
 end
 
@@ -211,9 +240,9 @@ function Visualizer:_updateTarget()
 		guis = guis:GetGuiObjectsAtPosition(location.X, location.Y)
 
 		if guis and #guis > 0 then
-			self._hoverTarget.Value = guis[1]
+			self._currentObjects.Value = guis
 		else
-			self._hoverTarget.Value = nil
+			self._currentObjects.Value = nil
 		end
 	end
 end
@@ -261,11 +290,11 @@ function Visualizer:_flashInstance(instance: GuiObject?)
 end
 
 function Visualizer:_updateRootInstance()
-	if not self._rootInstance.Value then
+	if not self.RootInstance.Value then
 		return
 	end
 
-	local group = VisualizerInstanceGroup.new(self._rootInstance.Value)
+	local group = VisualizerInstanceGroup.new(self.RootInstance.Value)
 	local rootEntry = group.RootEntry
 
 	self._list:AddInstanceGroup(group)
@@ -310,6 +339,18 @@ function Visualizer:_listenForInput()
 					self._targetSearchEnabled.Value = false
 				elseif self._propertiesVisible.Value then
 					self._propertiesVisible.Value = false
+				end
+			elseif input.KeyCode == Enum.KeyCode.Tab then
+				if self._targetSearchEnabled.Value then
+					local objects = self._currentObjects.Value
+
+					if objects then
+						if self._objectIndex.Value + 1 <= #objects then
+							self._objectIndex.Value += 1
+						else
+							self._objectIndex.Value = #objects
+						end
+					end
 				end
 			elseif input.KeyCode == Enum.KeyCode.P then
 				self:_moveUpOneParent()

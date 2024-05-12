@@ -4,7 +4,7 @@ local loader = script.Parent:FindFirstChild("LoaderUtils", true).Parent
 local require = require(loader).bootstrapPlugin(modules)
 
 local Maid = require("Maid")
-local Visualizer = require("Visualizer")
+local DrawVisualizer = require("DrawVisualizer")
 local VisualizerConstants = require("VisualizerConstants")
 
 local currentPane
@@ -12,7 +12,7 @@ local currentPane
 local function renderPane(target)
 	local maid = Maid.new()
 
-	local pane = Visualizer.new()
+	local pane = DrawVisualizer.new()
 	maid:GiveTask(pane)
 	maid:GiveTask(pane:Render({
 		Parent = target;
@@ -78,17 +78,19 @@ local function initialize(plugin)
 			currentPane = pane
 			maid._current = paneMaid
 
-			paneMaid:GiveTask(pane.RootInstance:Observe():Subscribe(function(instance)
+			paneMaid:GiveTask(target.WindowFocused:Connect(function()
+				pane:SetIsFocused(true)
+			end))
+
+			paneMaid:GiveTask(target.WindowFocusReleased:Connect(function()
+				pane:SetIsFocused(false)
+			end))
+
+			paneMaid:GiveTask(pane:ObserveRootInstance():Subscribe(function(instance)
 				if not instance then
 					target.Title = VisualizerConstants.PLUGIN_NAME
 				else
-					local count = 0
-
-					for _, descendant in instance:GetDescendants() do
-						if descendant:IsA("GuiObject") then
-							count += 1
-						end
-					end
+					local count = #instance:GetDescendants()
 
 					if count > 0 then
 						target.Title = `{VisualizerConstants.PLUGIN_NAME} - {instance.Name} ({count})`

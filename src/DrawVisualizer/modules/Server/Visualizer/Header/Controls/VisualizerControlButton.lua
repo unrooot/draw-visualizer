@@ -18,26 +18,21 @@ function VisualizerControlButton.new(buttonName: string)
 
 	self.ButtonName = assert(buttonName, "[VisualizerControlButton]: Must provide a button name!")
 
-	self.Activated = Signal.new()
-	self._maid:GiveTask(self.Activated)
+	self.Activated = self._maid:Add(Signal.new())
 
-	self._percentVisibleTarget = ValueObject.new(0)
-	self._maid:GiveTask(self._percentVisibleTarget)
+	self._percentVisibleTarget = self._maid:Add(ValueObject.new(0))
 
-	self._isChoosen = ValueObject.new(false)
-	self._maid:GiveTask(self._isChoosen)
+	self._isChoosen = self._maid:Add(ValueObject.new(false))
+
 	self._maid:GiveTask(self._isChoosen.Changed:Connect(function()
 		self._buttonModel:SetIsChoosen(self._isChoosen.Value)
 	end))
 
-	self._text = ValueObject.new("")
-	self._maid:GiveTask(self._text)
+	self._text = self._maid:Add(ValueObject.new(""))
 
-	self._layoutOrder = ValueObject.new(1)
-	self._maid:GiveTask(self._layoutOrder)
+	self._layoutOrder = self._maid:Add(ValueObject.new(1))
 
-	self._buttonModel = ButtonHighlightModel.new()
-	self._maid:GiveTask(self._buttonModel)
+	self._buttonModel = self._maid:Add(ButtonHighlightModel.new())
 
 	self._maid:GiveTask(self.VisibleChanged:Connect(function(isVisible)
 		self._percentVisibleTarget.Value = isVisible and 1 or 0
@@ -86,7 +81,7 @@ function VisualizerControlButton:Render(props)
 	local baseColor = Color3.fromRGB(72, 72, 72)
 
 	return Blend.New "Frame" {
-		Name = "ControlButton";
+		Name = "VisualizerControlButton";
 		BackgroundTransparency = 1;
 		LayoutOrder = self._layoutOrder;
 

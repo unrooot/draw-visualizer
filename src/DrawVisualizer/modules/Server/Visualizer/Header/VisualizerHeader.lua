@@ -2,6 +2,7 @@ local require = require(script.Parent.loader).load(script)
 
 local BasicPane = require("BasicPane")
 local Blend = require("Blend")
+local LuvColor3Utils = require("LuvColor3Utils")
 local Rx = require("Rx")
 local UIPaddingUtils = require("UIPaddingUtils")
 local ValueObject = require("ValueObject")
@@ -14,13 +15,14 @@ VisualizerHeader.__index = VisualizerHeader
 function VisualizerHeader.new()
 	local self = setmetatable(BasicPane.new(), VisualizerHeader)
 
-	self._percentVisibleTarget = ValueObject.new(0)
-	self._maid:GiveTask(self._percentVisibleTarget)
+	self._percentVisibleTarget = self._maid:Add(ValueObject.new(0))
 
-	self._buttons = VisualizerControls.new()
-	self._maid:GiveTask(self._buttons)
+	self._buttons = self._maid:Add(VisualizerControls.new())
 
 	self.ButtonActivated = self._buttons.ButtonActivated
+
+	self._focusedColor = Color3.fromRGB(197, 156, 242)
+	self._inactiveColor = Color3.fromRGB(150, 150, 150)
 
 	self._maid:GiveTask(self.VisibleChanged:Connect(function(isVisible, doNotAnimate)
 		self._percentVisibleTarget.Value = isVisible and 1 or 0
@@ -35,12 +37,22 @@ function VisualizerHeader:Render(props)
 		Rx.startWith({0})
 	}), 30, 0.9)
 
-	local transparency = Blend.Computed(percentVisible, function(percent)
+	local percentAlpha = Blend.AccelTween(Blend.toPropertyObservable(self._percentVisibleTarget):Pipe({
+		Rx.startWith({0})
+	}), 400)
+
+	local percentFocused = Blend.AccelTween(Blend.toPropertyObservable(props.IsFocused):Pipe({
+		Rx.map(function(isFocused)
+			return isFocused and 1 or 0
+		end)
+	}), 400)
+
+	local transparency = Blend.Computed(percentAlpha, function(percent)
 		return 1 - percent
 	end)
 
 	return Blend.New "Frame" {
-		Name = "header";
+		Name = "VisualizerHeader";
 		BackgroundTransparency = 1;
 		LayoutOrder = 1;
 
@@ -51,9 +63,12 @@ function VisualizerHeader:Render(props)
 		[Blend.Children] = {
 			Blend.New "Frame" {
 				Name = "title";
-				BackgroundColor3 = Color3.fromRGB(197, 156, 242);
 				BackgroundTransparency = transparency;
 				Size = UDim2.fromScale(1, 0.333);
+
+				BackgroundColor3 = Blend.Computed(percentFocused, function(percent)
+						return LuvColor3Utils.lerp(self._inactiveColor, self._focusedColor, percent)
+				end);
 
 				Position = Blend.Computed(transparency, function(percent)
 					return UDim2.fromScale(-percent, 0)

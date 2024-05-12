@@ -5,9 +5,11 @@ local BasicPaneUtils = require("BasicPaneUtils")
 local Blend = require("Blend")
 local Maid = require("Maid")
 local Rx = require("Rx")
+local RxBrioUtils = require("RxBrioUtils")
 local Signal = require("Signal")
 local Table = require("Table")
 local ValueObject = require("ValueObject")
+local VisualizerInstanceGroup = require("VisualizerInstanceGroup")
 
 local VisualizerListView = setmetatable({}, BasicPane)
 VisualizerListView.ClassName = "VisualizerListView"
@@ -16,29 +18,23 @@ VisualizerListView.__index = VisualizerListView
 function VisualizerListView.new()
 	local self = setmetatable(BasicPane.new(), VisualizerListView)
 
-	self._percentVisibleTarget = ValueObject.new(0)
-	self._maid:GiveTask(self._percentVisibleTarget)
-
-	self._contentHeight = ValueObject.new(0)
-	self._maid:GiveTask(self._contentHeight)
-
-	self._absoluteSize = ValueObject.new(Vector2.new())
-	self._maid:GiveTask(self._absoluteSize)
-
-	self.InstanceHovered = Signal.new()
-	self._maid:GiveTask(self.InstanceHovered)
-
-	self.InstancePicked = Signal.new()
-	self._maid:GiveTask(self.InstancePicked)
-
-	self.InstanceInspected = Signal.new()
-	self._maid:GiveTask(self.InstanceInspected)
-
 	self._groups = {}
 	self._groupMap = {}
 
-	self._groupObjects = ValueObject.new(Table.copy(self._groupMap))
-	self._maid:GiveTask(self._groupObjects)
+	self._percentVisibleTarget = self._maid:Add(ValueObject.new(0))
+
+	self._absoluteSize = self._maid:Add(ValueObject.new(Vector2.new()))
+	self._contentHeight = self._maid:Add(ValueObject.new(0))
+	self._currentGroup = self._maid:Add(ValueObject.new())
+	self._groupObjects = self._maid:Add(ValueObject.new(Table.copy(self._groupMap)))
+
+	self.InstanceHovered = self._maid:Add(Signal.new())
+	self.InstancePicked = self._maid:Add(Signal.new())
+	self.InstanceInspected = self._maid:Add(Signal.new())
+
+	self._maid:GiveTask(self._currentGroup:Observe():Subscribe(function()
+		--
+	end))
 
 	self._maid:GiveTask(self.VisibleChanged:Connect(function(isVisible)
 		self._percentVisibleTarget.Value = isVisible and 1 or 0
@@ -115,7 +111,7 @@ function VisualizerListView:Render(props)
 	local scrollBarImage = "rbxasset://textures/ui/Scroll/scroll-middle.png"
 
 	return Blend.New "Frame" {
-		Name = "list";
+		Name = "VisualizerListView";
 		BackgroundTransparency = 1;
 		Parent = props.Parent;
 
@@ -189,12 +185,82 @@ function VisualizerListView:Render(props)
 						end);
 					};
 
+					props.RootInstance:ObserveBrio():Pipe({
+						RxBrioUtils.map(function(instance)
+							if not instance then
+								if self._currentGroup then
+									self._currentGroup:Destroy()
+									self._currentGroup = nil
+								end
 
-					Blend.ComputedPairs(self._groupObjects, function(group)
-						return group:Render({
-							Parent = props.Parent;
-						})
-					end);
+								return
+							end
+
+							local depth = 0
+							local group
+							local createdGroup = false
+
+							if self._currentGroup then
+								local currentRoot = self._currentGroup:GetRootInstance()
+
+								depth = self._currentGroup.StartingDepth
+
+								if currentRoot then
+									if currentRoot:IsDescendantOf(instance) then
+										depth += 1
+
+										self._currentGroup:IncrementDepth()
+
+										group = VisualizerInstanceGroup.new(instance, depth - 1)
+										group:AddObject(self._currentGroup, depth)
+										group:SetRootInstance(instance)
+										createdGroup = true
+									else
+										self._currentGroup:Destroy()
+									end
+								end
+							end
+
+							if not group then
+								group = VisualizerInstanceGroup.new(instance)
+								group:SetRootInstance(instance)
+								createdGroup = true
+							end
+
+							if createdGroup then
+								local maid = group._maid
+
+								maid:GiveTask(group.InstancePicked:Connect(function(pickedInstance: Instance?)
+									self.InstancePicked:Fire(pickedInstance)
+								end))
+
+								maid:GiveTask(group.InstanceInspected:Connect(function(inspectedInstance: Instance?)
+									self.InstanceInspected:Fire(inspectedInstance)
+								end))
+
+								maid:GiveTask(group.InstanceHovered:Connect(function(hoverInstance: Instance?)
+									self.InstanceHovered:Fire(hoverInstance)
+								end))
+							end
+
+							self._currentGroup = group
+
+							if self:IsVisible() then
+								group:Show()
+							end
+
+							return group:Render({
+								RootInstance = instance;
+								Parent = props.Parent;
+							})
+						end);
+					});
+
+					-- Blend.ComputedPairs(self._groupObjects, function(group)
+					-- 	return group:Render({
+					-- 		Parent = props.Parent;
+					-- 	})
+					-- end);
 				};
 			};
 		};

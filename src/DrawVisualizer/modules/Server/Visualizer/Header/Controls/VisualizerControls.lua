@@ -15,11 +15,9 @@ VisualizerControls.__index = VisualizerControls
 function VisualizerControls.new()
 	local self = setmetatable(BasicPane.new(), VisualizerControls)
 
-	self._percentVisibleTarget = ValueObject.new(0)
-	self._maid:GiveTask(self._percentVisibleTarget)
+	self._percentVisibleTarget = self._maid:Add(ValueObject.new(0))
 
-	self.ButtonActivated = Signal.new()
-	self._maid:GiveTask(self.ButtonActivated)
+	self.ButtonActivated = self._maid:Add(Signal.new())
 
 	self._maid:GiveTask(self.VisibleChanged:Connect(function(isVisible)
 		self._percentVisibleTarget.Value = isVisible and 1 or 0
@@ -42,19 +40,17 @@ function VisualizerControls:_createButtons()
 		self.ButtonActivated:Fire(...)
 	end))
 
-	self._parentButton = VisualizerControlButton.new("parent")
+	self._parentButton = self._maid:Add(VisualizerControlButton.new("parent"))
 	self._parentButton:SetLayoutOrder(2)
 	self._parentButton:SetText("up one parent")
-	self._maid:GiveTask(self._parentButton)
 	self._maid:GiveTask(self._parentButton.Activated:Connect(function(...)
 		self.ButtonActivated:Fire(...)
 	end))
 
-	self._propertiesButton = VisualizerControlButton.new("properties")
+	self._propertiesButton = self._maid:Add(VisualizerControlButton.new("properties"))
 	self._propertiesButton:SetLayoutOrder(3)
 	self._propertiesButton:SetText("view properties")
 	self._propertiesButton:SetToggleBehavior(true)
-	self._maid:GiveTask(self._propertiesButton)
 	self._maid:GiveTask(self._propertiesButton.Activated:Connect(function(...)
 		self.ButtonActivated:Fire(...)
 	end))
@@ -69,11 +65,9 @@ function VisualizerControls:_createButtons()
 		self._propertiesButton
 	}
 
-	self._buttonCount = ValueObject.new(3)
-	self._maid:GiveTask(self._buttonCount)
+	self._buttonCount = self._maid:Add(ValueObject.new(3))
 
-	self._buttonsEnabled = ValueObject.new(Table.copy(self._buttons))
-	self._maid:GiveTask(self._buttonsEnabled)
+	self._buttonsEnabled = self._maid:Add(ValueObject.new(Table.copy(self._buttons)))
 end
 
 function VisualizerControls:Render(props)
@@ -93,7 +87,7 @@ function VisualizerControls:Render(props)
 	end)
 
 	return Blend.New "Frame" {
-		Name = "controls";
+		Name = "VisualizerControls";
 		Parent = props.Parent;
 
 		AnchorPoint = Vector2.new(0, 1);

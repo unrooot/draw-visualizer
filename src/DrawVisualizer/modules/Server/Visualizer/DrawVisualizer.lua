@@ -13,47 +13,45 @@ local PlayerGuiUtils = require("PlayerGuiUtils")
 local Rx = require("Rx")
 local ValueObject = require("ValueObject")
 local VisualizerHeader = require("VisualizerHeader")
-local VisualizerInstanceGroup = require("VisualizerInstanceGroup")
 local VisualizerListView = require("VisualizerListView")
 
-local Visualizer = setmetatable({}, BasicPane)
-Visualizer.ClassName = "Visualizer"
-Visualizer.__index = Visualizer
+local DrawVisualizer = setmetatable({}, BasicPane)
+DrawVisualizer.ClassName = "DrawVisualizer"
+DrawVisualizer.__index = DrawVisualizer
 
-function Visualizer.new(isHoarcekat: boolean)
-	local self = setmetatable(BasicPane.new(), Visualizer)
+function DrawVisualizer.new(isHoarcekat: boolean)
+	local self = setmetatable(BasicPane.new(), DrawVisualizer)
 
 	self:_createScreenGui()
 
-	self._propertiesVisible = ValueObject.new(false)
-	self._maid:GiveTask(self._propertiesVisible)
+	self._absoluteSize = self._maid:Add(ValueObject.new(Vector2.new()))
+	self._currentObjects = self._maid:Add(ValueObject.new(nil))
+	self._isFocused = self._maid:Add(ValueObject.new(false))
+	self._objectIndex = self._maid:Add(ValueObject.new(0))
+	self._propertiesVisible = self._maid:Add(ValueObject.new(false))
+	self._rootInstance = self._maid:Add(ValueObject.new(nil))
+	self._targetSearchEnabled = self._maid:Add(ValueObject.new(false))
+	self._hoverTarget = self._maid:Add(ValueObject.new(nil))
 
-	self._percentVisibleTarget = ValueObject.new(0)
-	self._maid:GiveTask(self._percentVisibleTarget)
+	self._percentVisibleTarget = self._maid:Add(ValueObject.new(0))
+	self._propertiesVisibleTarget = self._maid:Add(ValueObject.new(0))
 
-	self._propertiesVisibleTarget = ValueObject.new(0)
-	self._maid:GiveTask(self._propertiesVisibleTarget)
-
-	self._absoluteSize = ValueObject.new(Vector2.new())
-	self._maid:GiveTask(self._absoluteSize)
-
-	self._objectIndex = ValueObject.new(0)
-	self._maid:GiveTask(self._objectIndex)
 	self._maid:GiveTask(self._objectIndex.Changed:Connect(function()
 		local objects = self._currentObjects.Value
 		local index = self._objectIndex.Value
 
 		if not objects or index == 0 then
+			self._hoverTarget.Value = nil
 			return
 		end
 
 		if objects[index] then
 			self._hoverTarget.Value = objects[index]
+		else
+			self._hoverTarget.Value = nil
 		end
 	end))
 
-	self._targetSearchEnabled = ValueObject.new(false)
-	self._maid:GiveTask(self._targetSearchEnabled)
 	self._maid:GiveTask(self._targetSearchEnabled.Changed:Connect(function()
 		local isEnabled = self._targetSearchEnabled.Value
 		if self._targetButton then
@@ -66,19 +64,18 @@ function Visualizer.new(isHoarcekat: boolean)
 		end
 	end))
 
-	self.RootInstance = ValueObject.new()
-	self._maid:GiveTask(self.RootInstance)
-	self._maid:GiveTask(self.RootInstance.Changed:Connect(function()
-		self:_updateRootInstance()
+	self._maid:GiveTask(self._rootInstance.Changed:Connect(function()
+		if not self._rootInstance.Value then
+			return
+		end
+
+		self:_flashInstance(self._rootInstance.Value)
 	end))
 
-	self._hoverTarget = ValueObject.new(self.RootInstance.Value)
-	self._maid:GiveTask(self._hoverTarget)
 	self._maid:GiveTask(self._hoverTarget.Changed:Connect(function()
 		self:_flashInstance(self._hoverTarget.Value)
 	end))
 
-	self._currentObjects = ValueObject.new(nil)
 	self._maid:GiveTask(self._currentObjects:Observe():Subscribe(function(objects)
 		if not objects then
 			self._objectIndex.Value = 0
@@ -93,9 +90,8 @@ function Visualizer.new(isHoarcekat: boolean)
 		end
 	end))
 
-	self._header = VisualizerHeader.new()
-	self._maid:GiveTask(self._header)
-	self._maid:GiveTask(self._header.ButtonActivated:Connect(function(buttonName: string, button: table)
+	self._header = self._maid:Add(VisualizerHeader.new())
+	self._maid:GiveTask(self._header.ButtonActivated:Connect(function(buttonName: string, button)
 		if buttonName == "parent" then
 			self:_moveUpOneParent()
 		elseif buttonName == "target" then
@@ -107,8 +103,7 @@ function Visualizer.new(isHoarcekat: boolean)
 		end
 	end))
 
-	self._list = VisualizerListView.new()
-	self._maid:GiveTask(self._list)
+	self._list = self._maid:Add(VisualizerListView.new())
 
 	self._maid:GiveTask(self._list.InstancePicked:Connect(function(instance: Instance?)
 		self:SetRootInstance(instance)
@@ -138,12 +133,20 @@ function Visualizer.new(isHoarcekat: boolean)
 	return self
 end
 
-function Visualizer:SetTargetSearchEnabled(isEnabled: boolean)
+function DrawVisualizer:SetIsFocused(isFocused: boolean)
+	self._isFocused.Value = isFocused
+end
+
+function DrawVisualizer:ObserveRootInstance()
+	return self._rootInstance:Observe()
+end
+
+function DrawVisualizer:SetTargetSearchEnabled(isEnabled: boolean)
 	self._targetSearchEnabled.Value = isEnabled
 end
 
-function Visualizer:SetRootInstance(instance: Instance)
-	self.RootInstance.Value = instance
+function DrawVisualizer:SetRootInstance(instance: Instance)
+	self._rootInstance.Value = instance
 
 	if not instance then
 		self._maid._current = nil
@@ -151,14 +154,12 @@ function Visualizer:SetRootInstance(instance: Instance)
 	end
 end
 
-function Visualizer:InspectInstance(instance: Instance?)
-	print("inspecting", instance)
-
+function DrawVisualizer:InspectInstance(instance: Instance?)
 	self._propertiesVisible.Value = not self._propertiesVisible.Value
 	self._propertiesVisibleTarget.Value = self._propertiesVisible.Value and 1 or 0
 end
 
-function Visualizer:Render(props)
+function DrawVisualizer:Render(props)
 	local percentVisible = Blend.Spring(Blend.toPropertyObservable(self._percentVisibleTarget):Pipe({
 		Rx.startWith({0})
 	}), 30, 0.9)
@@ -193,11 +194,13 @@ function Visualizer:Render(props)
 				[Blend.Children] = {
 					self._header:Render({
 						AbsoluteRootSize = self._absoluteSize;
+						IsFocused = self._isFocused;
 						Parent = props.Parent;
 					});
 
 					self._list:Render({
 						AbsoluteRootSize = self._absoluteSize;
+						RootInstance = self._rootInstance;
 						Parent = props.Parent;
 					})
 				};
@@ -206,13 +209,13 @@ function Visualizer:Render(props)
 	};
 end
 
-function Visualizer:_moveUpOneParent()
-	if self.RootInstance.Value then
-		self:SetRootInstance(self.RootInstance.Value.Parent)
+function DrawVisualizer:_moveUpOneParent()
+	if self._rootInstance.Value then
+		self:SetRootInstance(self._rootInstance.Value.Parent)
 	end
 end
 
-function Visualizer:_selectTarget(ctrlPressed: boolean)
+function DrawVisualizer:_selectTarget(ctrlPressed: boolean)
 	if self._targetSearchEnabled.Value then
 		self:SetRootInstance(self._hoverTarget.Value)
 
@@ -225,7 +228,7 @@ function Visualizer:_selectTarget(ctrlPressed: boolean)
 	self._maid._flash = nil
 end
 
-function Visualizer:_updateTarget()
+function DrawVisualizer:_updateTarget()
 	if self._targetSearchEnabled.Value then
 		local location = UserInputService:GetMouseLocation()
 		local guis = StarterGui
@@ -247,7 +250,7 @@ function Visualizer:_updateTarget()
 	end
 end
 
-function Visualizer:_flashInstance(instance: GuiObject?)
+function DrawVisualizer:_flashInstance(instance: GuiObject?)
 	if not instance then
 		if self._maid._flash then
 			self._maid._flash = nil
@@ -289,25 +292,7 @@ function Visualizer:_flashInstance(instance: GuiObject?)
 	flashTarget.Value = 0.3
 end
 
-function Visualizer:_updateRootInstance()
-	if not self.RootInstance.Value then
-		return
-	end
-
-	local group = VisualizerInstanceGroup.new(self.RootInstance.Value)
-	local rootEntry = group.RootEntry
-
-	self._list:AddInstanceGroup(group)
-	self:_flashInstance(rootEntry.Instance)
-
-	self._maid._current = function()
-		if self._list and self._list.RemoveInstanceGroup then
-			self._list:RemoveInstanceGroup(group)
-		end
-	end
-end
-
-function Visualizer:_createScreenGui()
+function DrawVisualizer:_createScreenGui()
 	local observable = Blend.New "ScreenGui" {
 		Name = "VisualizerEffects";
 		DisplayOrder = 99999;
@@ -320,13 +305,16 @@ function Visualizer:_createScreenGui()
 	self._maid:GiveTask(observable:Subscribe())
 end
 
-function Visualizer:_listenForInput()
+function DrawVisualizer:_listenForInput()
 	self._maid:GiveTask(UserInputService.InputBegan:Connect(function(input)
+		local keysPressed = UserInputService:GetKeysPressed()
+
 		if input.UserInputType == Enum.UserInputType.MouseMovement then
 			self:_updateTarget()
 		elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
 			local ctrlPressed = false
-			for _, inputObject in UserInputService:GetKeysPressed() do
+
+			for _, inputObject in keysPressed do
 				if inputObject.KeyCode == Enum.KeyCode.LeftControl then
 					ctrlPressed = true
 				end
@@ -342,13 +330,27 @@ function Visualizer:_listenForInput()
 				end
 			elseif input.KeyCode == Enum.KeyCode.Tab then
 				if self._targetSearchEnabled.Value then
+					local objectIndex = self._objectIndex.Value
 					local objects = self._currentObjects.Value
+					local shiftPressed = false
+
+					for _, inputObject in keysPressed do
+						if inputObject.KeyCode == Enum.KeyCode.LeftShift then
+							shiftPressed = true
+						end
+					end
 
 					if objects then
-						if self._objectIndex.Value + 1 <= #objects then
-							self._objectIndex.Value += 1
+						if shiftPressed then
+							if objectIndex + 1 <= #objects then
+								self._objectIndex.Value += 1
+							else
+								self._objectIndex.Value = 1
+							end
 						else
-							self._objectIndex.Value = #objects
+							if objectIndex - 1 <= 0 then
+								self._objectIndex.Value = objectIndex
+							end
 						end
 					end
 				end
@@ -361,6 +363,9 @@ function Visualizer:_listenForInput()
 	self._maid:GiveTask(UserInputService.InputChanged:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseMovement then
 			self:_updateTarget()
+		elseif input.UserInputType == Enum.UserInputType.Keyboard then
+			for _, inputObject in UserInputService:GetKeysPressed() do
+			end
 		end
 	end))
 
@@ -371,4 +376,4 @@ function Visualizer:_listenForInput()
 	end))
 end
 
-return Visualizer
+return DrawVisualizer

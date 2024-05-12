@@ -25,50 +25,34 @@ VisualizerInstanceGroup.__index = VisualizerInstanceGroup
 function VisualizerInstanceGroup.new(rootInstance: Instance, startingDepth: number?)
 	local self = setmetatable(BasicPane.new(), VisualizerInstanceGroup)
 
-	self._rootInstance = assert(rootInstance, "[VisualizerInstanceGroup]: Root instance is needed!")
-	self.Instance = self._rootInstance
-
-	self._startingDepth = startingDepth or 0
-
-	self._percentVisibleTarget = ValueObject.new(0)
-	self._maid:GiveTask(self._percentVisibleTarget)
-
-	self._percentCollapsedTarget = ValueObject.new(1)
-	self._maid:GiveTask(self._percentCollapsedTarget)
+	assert(rootInstance, "[VisualizerInstanceGroup]: Must provide a root instance!")
 
 	self._instances = {}
 	self._instanceMap = {}
 
+	self.StartingDepth = startingDepth and startingDepth or 0
+
+	self._rootInstance = self._maid:Add(ValueObject.new(rootInstance))
+	self._instanceEntries = self._maid:Add(ValueObject.new(Table.copy(self._instanceMap)))
+	self._layoutOrder = self._maid:Add(ValueObject.new(0))
+	self._absoluteSize = self._maid:Add(ValueObject.new(Vector2.new()))
+	self._contentSize = self._maid:Add(ValueObject.new(Vector2.new()))
+
+	self._percentVisibleTarget = self._maid:Add(ValueObject.new(0))
+	self._percentCollapsedTarget = self._maid:Add(ValueObject.new(1))
+
 	self._maid._groups = Maid.new()
 
-	self._instanceEntries = ValueObject.new(Table.copy(self._instanceMap))
-	self._maid:GiveTask(self._instanceEntries)
-
-	self._layoutOrder = ValueObject.new(0)
-	self._maid:GiveTask(self._layoutOrder)
-
-	self._absoluteSize = ValueObject.new(Vector2.new())
-	self._maid:GiveTask(self._absoluteSize)
-
-	self._contentSize = ValueObject.new(Vector2.new())
-	self._maid:GiveTask(self._contentSize)
-
-	self._collapsed = ValueObject.new(true)
-	self._maid:GiveTask(self._collapsed)
+	self._collapsed = self._maid:Add(ValueObject.new(true))
 	self._maid:GiveTask(self._collapsed.Changed:Connect(function()
 		self._percentCollapsedTarget.Value = self._collapsed.Value and 1 or 0
 	end))
 
-	self.InstanceHovered = Signal.new()
-	self._maid:GiveTask(self.InstanceHovered)
+	self.InstanceHovered = self._maid:Add(Signal.new())
+	self.InstancePicked = self._maid:Add(Signal.new())
+	self.InstanceInspected = self._maid:Add(Signal.new())
 
-	self.InstancePicked = Signal.new()
-	self._maid:GiveTask(self.InstancePicked)
-
-	self.InstanceInspected = Signal.new()
-	self._maid:GiveTask(self.InstanceInspected)
-
-	self:_observeDescendants(rootInstance)
+	-- self:SetRootInstance(rootInstance)
 
 	self._maid:GiveTask(self.VisibleChanged:Connect(function(isVisible)
 		self._percentVisibleTarget.Value = isVisible and 1 or 0
@@ -77,14 +61,22 @@ function VisualizerInstanceGroup.new(rootInstance: Instance, startingDepth: numb
 	return self
 end
 
-function VisualizerInstanceGroup:AddObject(instanceObject: table, depth: number)
-	if not instanceObject then
+function VisualizerInstanceGroup:GetRootInstance()
+	return self._rootInstance.Value
+end
+
+function VisualizerInstanceGroup:AddObject(instanceEntry, depth: number)
+	if not instanceEntry then
 		return warn("[VisualizerInstanceGroup]: Must provide an instance group or entry!")
 	end
 
-	local className = instanceObject.ClassName
-	local instance = instanceObject.Instance
+	local className = instanceEntry.ClassName
+	local instance = instanceEntry.Instance
 	local layoutOrder
+
+	if self._maid[instance] then
+		return
+	end
 
 	if className == self.ClassName then
 		local depthBrio = self:_getBrioFromDepth(depth)
@@ -96,7 +88,10 @@ function VisualizerInstanceGroup:AddObject(instanceObject: table, depth: number)
 		local groupCount = 0
 		local groups = depthBrio:GetValue()
 
-		groups.Value[instanceObject.Instance] = instanceObject
+		-- instance = self._rootInstance.Value
+		instance = instanceEntry:GetRootInstance()
+
+		groups.Value[instance] = instanceEntry
 
 		for _ in groups do
 			groupCount += 1
@@ -105,10 +100,10 @@ function VisualizerInstanceGroup:AddObject(instanceObject: table, depth: number)
 		layoutOrder = groupCount
 	end
 
-	table.insert(self._instances, instanceObject)
-	instanceObject:SetLayoutOrder(#self._instances)
+	table.insert(self._instances, instanceEntry)
+	instanceEntry:SetLayoutOrder(#self._instances)
 
-	if instance == self._rootInstance then
+	if instance == self._rootInstance.Value then
 		layoutOrder = -1
 	elseif instance:IsA("UIComponent") then
 		layoutOrder = 0
@@ -116,21 +111,21 @@ function VisualizerInstanceGroup:AddObject(instanceObject: table, depth: number)
 		layoutOrder = #self._instances
 	end
 
-	instanceObject:SetLayoutOrder(layoutOrder)
+	instanceEntry:SetLayoutOrder(layoutOrder)
 
 	local maid = Maid.new()
-	maid:GiveTask(instanceObject)
+	maid:GiveTask(instanceEntry)
 
 	if className == "VisualizerInstanceEntry" then
-		maid:GiveTask(instanceObject.InstancePicked:Connect(function(pickedInstance)
+		maid:GiveTask(instanceEntry.InstancePicked:Connect(function(pickedInstance)
 			self.InstancePicked:Fire(pickedInstance)
 		end))
 
-		maid:GiveTask(instanceObject.InstanceInspected:Connect(function(inspectedInstance)
+		maid:GiveTask(instanceEntry.InstanceInspected:Connect(function(inspectedInstance)
 			self.InstanceInspected:Fire(inspectedInstance)
 		end))
 
-		maid:GiveTask(instanceObject.InstanceHovered:Connect(function(isHovered: boolean)
+		maid:GiveTask(instanceEntry.InstanceHovered:Connect(function(isHovered: boolean)
 			for _, inputObject in UserInputService:GetKeysPressed() do
 				if inputObject.KeyCode == Enum.KeyCode.LeftControl then
 					Selection:Set({instance})
@@ -140,8 +135,8 @@ function VisualizerInstanceGroup:AddObject(instanceObject: table, depth: number)
 			self.InstanceHovered:Fire(isHovered and instance or nil)
 		end))
 
-		maid:GiveTask(instanceObject.Activated:Connect(function(ctrlPressed: boolean)
-			instance = instanceObject.Instance
+		maid:GiveTask(instanceEntry.Activated:Connect(function(ctrlPressed: boolean)
+			instance = instanceEntry.Instance
 			if not instance then
 				return
 			end
@@ -153,61 +148,175 @@ function VisualizerInstanceGroup:AddObject(instanceObject: table, depth: number)
 
 			if #instance:GetChildren() > 0 then
 				self._collapsed.Value = not self._collapsed.Value
-				instanceObject:SetCollapsed(self._collapsed.Value)
+				instanceEntry:SetCollapsed(self._collapsed.Value)
 			end
 		end))
 	end
 
-	self._maid[instanceObject.Instance] = maid
-	self._instanceMap[instanceObject] = true
+	self._maid[instance] = maid
+	self._instanceMap[instanceEntry] = true
 	self._instanceEntries.Value = Table.copy(self._instanceMap)
 
 	if className == "VisualizerInstanceEntry" then
-		instanceObject.IsRootInstance.Value = instanceObject == self._rootInstance
-		instanceObject:SetDepth(depth)
-	end
-end
-
-function VisualizerInstanceGroup:RemoveObject(instanceObject: Instance?, depth: number)
-	if not instanceObject then
-		return
-	elseif instanceObject.ClassName == self.ClassName and not depth then
-		return warn("[VisualizerInstanceGroup]: Must provide depth when removing groups!")
-	end
-
-	if instanceObject.ClassName == self.ClassName then
-		local brio = self._maid._groups[depth]
-		if brio then
-			if not brio:IsDead() then
-				local valueObject = brio:GetValue()
-				local groups = valueObject.Value
-
-				if #groups == 1 and groups[1] == instanceObject then
-					self._maid._groups[depth] = nil
-				else
-					local groupIndex = table.find(groups, instanceObject)
-					if groupIndex then
-						table.remove(groups, groupIndex)
-					end
-
-					valueObject.Value = groups
-				end
-			end
-		end
-	end
-
-	self._maid[instanceObject.Instance] = nil
-	self._instanceMap[instanceObject] = nil
-	self._instanceEntries.Value = Table.copy(self._instanceMap)
-
-	local index = table.find(self._instances, instanceObject)
-	if index then
-		table.remove(self._instances, index)
+		instanceEntry.IsRootInstance.Value = instanceEntry == self._rootInstance.Value
+		instanceEntry:SetDepth(depth)
 	end
 end
 
 function VisualizerInstanceGroup:SetLayoutOrder(layoutOrder: number)
 	self._layoutOrder.Value = layoutOrder
+end
+
+function VisualizerInstanceGroup:_getBrioFromDepth(depth: number)
+	if not depth or depth < 1 then
+		return
+	end
+
+	if not self._maid._groups[depth] then
+		self._maid._groups[depth] = Brio.new(ValueObject.new({}))
+	end
+
+	return self._maid._groups[depth]
+end
+
+function VisualizerInstanceGroup:_getGroupFromBrio(brio, instance: Instance, depth: number)
+	if not instance then
+		return self
+	end
+
+	if not brio or brio:IsDead() then
+		return self
+	end
+
+	if #instance:GetChildren() == 0 then
+		return self
+	end
+
+	local maid = Maid.new()
+	local groups = brio:GetValue()
+	local group = groups.Value[instance]
+
+	if group then
+		return group
+	end
+
+	group = VisualizerInstanceGroup.new(instance, depth)
+	group:SetRootInstance(instance)
+
+	groups.Value[instance] = group
+
+	maid:GiveTask(group)
+
+	maid:GiveTask(group.InstancePicked:Connect(function(pickedInstance: Instance?)
+		self.InstancePicked:Fire(pickedInstance)
+	end))
+
+	maid:GiveTask(group.InstanceInspected:Connect(function(inspectedInstance: Instance?)
+		self.InstanceInspected:Fire(inspectedInstance)
+	end))
+
+	maid:GiveTask(group.InstanceHovered:Connect(function(hoverInstance: Instance?)
+		self.InstanceHovered:Fire(hoverInstance)
+	end))
+
+	brio:ToMaid():GiveTask(function()
+		maid:Destroy()
+	end)
+
+	return group
+end
+
+function VisualizerInstanceGroup:_getDepth(baseInstance: Instance)
+	local root = self._rootInstance.Value
+	local parent = baseInstance
+	local depth = self.StartingDepth
+
+	repeat
+		if parent ~= root then
+			depth += 1
+		end
+
+		parent = parent.Parent
+	until
+		parent == root or depth >= MAX_INSTANCE_DEPTH
+
+	return depth
+end
+
+function VisualizerInstanceGroup:_createEntry(instance: Instance)
+	assert(typeof(instance) == "Instance", "[VisualizerInstanceGroup]: Must provide an instance!")
+
+	local entry = VisualizerInstanceEntry.new()
+	entry:SetInstance(instance)
+
+	return entry
+end
+
+function VisualizerInstanceGroup:IncrementDepth()
+	self.StartingDepth += 1
+
+	for _, entry in self._instances do
+		if entry.ClassName == "VisualizerInstanceEntry" then
+			entry:SetDepth(entry:GetDepth() + 1)
+		elseif entry.ClassName == "VisualizerInstanceGroup" then
+			entry:IncrementDepth()
+		end
+	end
+end
+
+function VisualizerInstanceGroup:SetRootInstance(rootInstance)
+	self._rootInstance.Value = rootInstance
+
+	if not rootInstance then
+		return
+	end
+
+	local descendantCount = #rootInstance:GetDescendants()
+
+	if descendantCount >= MAX_INSTANCE_DEPTH then
+		return warn(string.format("[VisualizerInstanceGroup]: Root instance exceeds max depth size (%d)!", descendantCount))
+	end
+
+	self._rootEntry = self:_createEntry(rootInstance)
+	self:AddObject(self._rootEntry, self.StartingDepth)
+
+	self._maid:GiveTask(RxInstanceUtils.observeChildrenBrio(rootInstance, self._predicate)
+		:Subscribe(function(brio)
+			if brio:IsDead() then
+				return
+			end
+
+			local instance = brio:GetValue()
+			if not instance then
+				return
+			end
+
+			if self._maid[instance] then
+				return
+			end
+
+			local depth = self:_getDepth(instance)
+			local depthBrio = self:_getBrioFromDepth(depth)
+			local group = self:_getGroupFromBrio(depthBrio, instance, depth)
+
+			local children = instance:GetChildren()
+
+			if #children > 0 then
+				if self ~= group then
+					self:AddObject(group, depth)
+				end
+			else
+				if not self._maid[instance] then
+					group:AddObject(self:_createEntry(instance), depth)
+				end
+			end
+		end))
+
+	return
+end
+
+function VisualizerInstanceGroup._predicate(instance: Instance)
+	return true
 end
 
 function VisualizerInstanceGroup:Render(props)
@@ -231,7 +340,7 @@ function VisualizerInstanceGroup:Render(props)
 	end)
 
 	return Blend.New "Frame" {
-		Name = "InstanceGroup";
+		Name = "VisualizerInstanceGroup";
 		BackgroundTransparency = 1;
 		Parent = props.Parent;
 
@@ -283,131 +392,6 @@ function VisualizerInstanceGroup:Render(props)
 			};
 		};
 	};
-end
-
-function VisualizerInstanceGroup:_getBrioFromDepth(depth: number)
-	if not depth or depth < 1 then
-		return
-	end
-
-	if not self._maid._groups[depth] then
-		self._maid._groups[depth] = Brio.new(ValueObject.new({}))
-	end
-
-	return self._maid._groups[depth]
-end
-
-function VisualizerInstanceGroup:_getGroupFromBrio(brio: table, instance: Instance, depth: number)
-	if not instance then
-		return self
-	end
-
-	if not brio or brio:IsDead() then
-		return self
-	end
-
-	if #instance:GetChildren() == 0 then
-		return self
-	end
-
-	local maid = Maid.new()
-	local valueObject = brio:GetValue()
-	local groups = valueObject.Value
-	local group = groups[instance]
-
-	if group then
-		return group
-	end
-
-	group = VisualizerInstanceGroup.new(instance, depth)
-	groups[instance] = group
-
-	maid:GiveTask(group)
-
-	maid:GiveTask(group.InstancePicked:Connect(function(pickedInstance: Instance?)
-		self.InstancePicked:Fire(pickedInstance)
-	end))
-
-	maid:GiveTask(group.InstanceInspected:Connect(function(inspectedInstance: Instance?)
-		self.InstanceInspected:Fire(inspectedInstance)
-	end))
-
-	maid:GiveTask(group.InstanceHovered:Connect(function(hoverInstance: Instance?)
-		self.InstanceHovered:Fire(hoverInstance)
-	end))
-
-	brio:ToMaid():GiveTask(function()
-		maid:Destroy()
-	end)
-
-	return group
-end
-
-function VisualizerInstanceGroup:_getDepth(baseInstance: Instance)
-	local root = self._rootInstance
-	local parent = baseInstance
-	local depth = self._startingDepth
-
-	repeat
-		if parent ~= root then
-			depth += 1
-		end
-
-		parent = parent.Parent
-	until
-		parent == root or depth >= MAX_INSTANCE_DEPTH
-
-	return depth
-end
-
-function VisualizerInstanceGroup:_createEntry(instance: Instance)
-	assert(typeof(instance) == "Instance", "[VisualizerInstanceGroup]: Must provide an instance!")
-
-	local entry = VisualizerInstanceEntry.new()
-	entry:SetInstance(instance)
-
-	return entry
-end
-
-function VisualizerInstanceGroup:_observeDescendants(baseInstance: Instance)
-	local descendantCount = #baseInstance:GetDescendants()
-	if descendantCount >= MAX_INSTANCE_DEPTH then
-		return warn(string.format("[VisualizerInstanceGroup]: Root instance exceeds max depth size (%d)!", descendantCount))
-	end
-
-	self.RootEntry = self:_createEntry(baseInstance)
-	self:AddObject(self.RootEntry, self._startingDepth)
-
-	self._maid._current = RxInstanceUtils.observeChildrenBrio(baseInstance, self._predicate):Subscribe(function(brio: table)
-		if brio:IsDead() then
-			return
-		end
-
-		local instance = brio:GetValue()
-		if not instance then
-			return
-		end
-
-		local depth = self:_getDepth(instance)
-		local depthBrio = self:_getBrioFromDepth(depth)
-		local group = self:_getGroupFromBrio(depthBrio, instance, depth)
-
-		local children = instance:GetChildren()
-
-		if #children > 0 then
-			if self ~= group then
-				self:AddObject(group, depth)
-			end
-		else
-			if not self._maid[instance] then
-				group:AddObject(self:_createEntry(instance), depth)
-			end
-		end
-	end)
-end
-
-function VisualizerInstanceGroup._predicate(instance: Instance)
-	return true
 end
 
 return VisualizerInstanceGroup

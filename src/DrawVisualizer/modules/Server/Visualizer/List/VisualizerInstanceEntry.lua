@@ -20,64 +20,37 @@ VisualizerInstanceEntry.__index = VisualizerInstanceEntry
 function VisualizerInstanceEntry.new()
 	local self = setmetatable(BasicPane.new(), VisualizerInstanceEntry)
 
-	self.IsRootInstance = ValueObject.new(false)
-	self._maid:GiveTask(self.IsRootInstance)
+	self.IsRootInstance = self._maid:Add(ValueObject.new(false))
 
-	self._percentVisibleTarget = ValueObject.new(0)
-	self._maid:GiveTask(self._percentVisibleTarget)
+	self._percentVisibleTarget = self._maid:Add(ValueObject.new(0))
+	self._percentCollapsedTarget = self._maid:Add(ValueObject.new(1))
 
-	self._percentCollapsedTarget = ValueObject.new(1)
-	self._maid:GiveTask(self._percentCollapsedTarget)
+	self._absoluteSize = self._maid:Add(ValueObject.new(Vector2.new()))
+	self._childCount = self._maid:Add(ValueObject.new(0))
+	self._depth = self._maid:Add(ValueObject.new(0))
+	self._iconData = self._maid:Add(ValueObject.new({}))
+	self._instanceAbsoluteSize = self._maid:Add(ValueObject.new(Vector2.new()))
+	self._instanceName = self._maid:Add(ValueObject.new(""))
+	self._layoutOrder = self._maid:Add(ValueObject.new(0))
 
-	self._depth = ValueObject.new(0)
-	self._maid:GiveTask(self._depth)
-
-	self._childCount = ValueObject.new(0)
-	self._maid:GiveTask(self._childCount)
-
-	self._instanceName = ValueObject.new("")
-	self._maid:GiveTask(self._instanceName)
-
-	self._absoluteSize = ValueObject.new(Vector2.new())
-	self._maid:GiveTask(self._absoluteSize)
-
-	self._instanceAbsoluteSize = ValueObject.new(Vector2.new())
-	self._maid:GiveTask(self._instanceAbsoluteSize)
-
-	self._layoutOrder = ValueObject.new(0)
-	self._maid:GiveTask(self._layoutOrder)
-
-	self._isCollapsed = ValueObject.new(true)
-	self._maid:GiveTask(self._isCollapsed)
+	self._isCollapsed = self._maid:Add(ValueObject.new(true))
 	self._maid:GiveTask(self._isCollapsed.Changed:Connect(function()
 		self._percentCollapsedTarget.Value = self._isCollapsed.Value and 1 or 0
 	end))
 
-	self._className = ValueObject.new("")
-	self._maid:GiveTask(self._className)
+	self._className = self._maid:Add(ValueObject.new(""))
 	self._maid:GiveTask(self._className.Changed:Connect(function()
 		self._iconData.Value = StudioService:GetClassIcon(self._className.Value)
 	end))
 
-	self._iconData = ValueObject.new({})
-	self._maid:GiveTask(self._iconData)
-
-	self.Activated = Signal.new()
-	self._maid:GiveTask(self.Activated)
-
-	self.InstanceHovered = Signal.new()
-	self._maid:GiveTask(self.InstanceHovered)
-
-	self.InstancePicked = Signal.new()
-	self._maid:GiveTask(self.InstancePicked)
-
-	self.InstanceInspected = Signal.new()
-	self._maid:GiveTask(self.InstanceInspected)
+	self.Activated = self._maid:Add(Signal.new())
+	self.InstanceHovered = self._maid:Add(Signal.new())
+	self.InstanceInspected = self._maid:Add(Signal.new())
+	self.InstancePicked = self._maid:Add(Signal.new())
 
 	self._buttonModel = ButtonHighlightModel.new()
-	self._maid:GiveTask(self._buttonModel)
-	self._maid:GiveTask(self._buttonModel.IsHighlighted.Changed:Connect(function()
-		self.InstanceHovered:Fire(self._buttonModel.IsHighlighted.Value)
+	self._maid:GiveTask(self._buttonModel:ObserveIsHighlighted():Subscribe(function(isHighlighted)
+		self.InstanceHovered:Fire(isHighlighted)
 	end))
 
 	self._maid:GiveTask(self.VisibleChanged:Connect(function(isVisible)
@@ -85,6 +58,10 @@ function VisualizerInstanceEntry.new()
 	end))
 
 	return self
+end
+
+function VisualizerInstanceEntry:GetDepth()
+	return self._depth.Value
 end
 
 function VisualizerInstanceEntry:SetDepth(depth: number)

@@ -1,14 +1,15 @@
-local require = require(game:GetService("ServerScriptService"):FindFirstChild("LoaderUtils", true).Parent).load(script)
+local require = require(game:GetService("ServerScriptService"):FindFirstChild("LoaderUtils", true).Parent).bootstrapStory(script)
 
 local UserInputService = game:GetService("UserInputService")
 
 local Maid = require("Maid")
-local Visualizer = require("Visualizer")
+local DrawVisualizer = require("DrawVisualizer")
 
 return function(target)
 	local maid = Maid.new()
 
-	local pane = Visualizer.new(true)
+	local pane = DrawVisualizer.new(false)
+	pane:SetIsFocused(true)
 	maid:GiveTask(pane)
 	maid:GiveTask(pane:Render({
 		Parent = target;

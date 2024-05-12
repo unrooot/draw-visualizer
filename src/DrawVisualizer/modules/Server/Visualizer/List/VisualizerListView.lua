@@ -176,13 +176,7 @@ function VisualizerListView:Render(props)
 							self._contentHeight.Value = contentSize.Y
 						end;
 
-						Padding = Blend.Computed(self._absoluteSize, self._contentHeight, function(size: Vector2, height: number)
-							if height < size.Y then
-								return UDim.new(15 / size.Y, 0)
-							else
-								return UDim.new(15 / height, 0)
-							end
-						end);
+						Padding = UDim.new(0, 5);
 					};
 
 					props.RootInstance:ObserveBrio():Pipe({
@@ -203,7 +197,7 @@ function VisualizerListView:Render(props)
 							if self._currentGroup then
 								local currentRoot = self._currentGroup:GetRootInstance()
 
-								depth = self._currentGroup.StartingDepth
+								depth = self._currentGroup.StartingDepth.Value
 
 								if currentRoot then
 									if currentRoot:IsDescendantOf(instance) then

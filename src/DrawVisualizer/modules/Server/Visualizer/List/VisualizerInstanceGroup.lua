@@ -30,7 +30,7 @@ function VisualizerInstanceGroup.new(rootInstance: Instance, startingDepth: numb
 	self._instances = {}
 	self._instanceMap = {}
 
-	self.StartingDepth = startingDepth and startingDepth or 0
+	self.StartingDepth = self._maid:Add(ValueObject.new(startingDepth and startingDepth or 0))
 
 	self._rootInstance = self._maid:Add(ValueObject.new(rootInstance))
 	self._instanceEntries = self._maid:Add(ValueObject.new(Table.copy(self._instanceMap)))
@@ -229,7 +229,7 @@ end
 function VisualizerInstanceGroup:_getDepth(baseInstance: Instance)
 	local root = self._rootInstance.Value
 	local parent = baseInstance
-	local depth = self.StartingDepth
+	local depth = self.StartingDepth.Value
 
 	repeat
 		if parent ~= root then
@@ -253,7 +253,7 @@ function VisualizerInstanceGroup:_createEntry(instance: Instance)
 end
 
 function VisualizerInstanceGroup:IncrementDepth()
-	self.StartingDepth += 1
+	self.StartingDepth.Value += 1
 
 	for _, entry in self._instances do
 		if entry.ClassName == "VisualizerInstanceEntry" then
@@ -278,7 +278,7 @@ function VisualizerInstanceGroup:SetRootInstance(rootInstance)
 	end
 
 	self._rootEntry = self:_createEntry(rootInstance)
-	self:AddObject(self._rootEntry, self.StartingDepth)
+	self:AddObject(self._rootEntry, self.StartingDepth.Value)
 
 	self._maid:GiveTask(RxInstanceUtils.observeChildrenBrio(rootInstance, self._predicate)
 		:Subscribe(function(brio)
@@ -372,6 +372,7 @@ function VisualizerInstanceGroup:Render(props)
 					return UDim2.fromScale(Math.map(percent, 0, 1, 0, -0.3), 0)
 				end);
 
+
 				[Blend.Children] = {
 					Blend.New "UIListLayout" {
 						FillDirection = Enum.FillDirection.Vertical;
@@ -390,6 +391,24 @@ function VisualizerInstanceGroup:Render(props)
 					end);
 				};
 			};
+		};
+
+		Blend.New "ImageLabel" {
+			Name = "alternatingColors";
+			Size = UDim2.fromScale(1, 1);
+			BackgroundTransparency = 1;
+			Image = "rbxassetid://17468337820";
+			ScaleType = Enum.ScaleType.Tile;
+			TileSize = UDim2.new(1, 0, 0, 70);
+			ZIndex = 0;
+
+			Visible = Blend.Computed(self.StartingDepth, function(depth)
+				return depth == 0
+			end);
+
+			ImageTransparency = Blend.Computed(transparency, function(percent)
+				return 0.97 + percent
+			end);
 		};
 	};
 end

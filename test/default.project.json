@@ -1,5 +1,6 @@
 {
 	"name": "draw-visualizer",
+	"globIgnorePaths": [ "**/.bin/**", "**/.package-lock.json" ],
 	"tree": {
 		"$className": "DataModel",
 		"ServerScriptService": {

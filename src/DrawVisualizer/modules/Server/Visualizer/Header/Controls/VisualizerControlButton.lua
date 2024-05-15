@@ -128,7 +128,7 @@ function VisualizerControlButton:Render(props)
 				end);
 
 				[Blend.Children] = {
-					UIPaddingUtils.fromUDim(UDim.new(0, 5));
+					UIPaddingUtils.fromUDim(UDim.new(0, 15));
 
 					Blend.New "TextLabel" {
 						BackgroundTransparency = 1;
@@ -152,7 +152,7 @@ function VisualizerControlButton:Render(props)
 
 						[Blend.Children] = {
 							Blend.New "UITextSizeConstraint" {
-								MaxTextSize = 15;
+								MaxTextSize = 13;
 							};
 						};
 					};

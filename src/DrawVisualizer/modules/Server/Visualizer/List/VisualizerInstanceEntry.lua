@@ -92,6 +92,10 @@ function VisualizerInstanceEntry:SetIsPressed(isPressed: boolean)
 	self._buttonModel:SetKeyDown(isPressed)
 end
 
+function VisualizerInstanceEntry:SetIsHighlighted(isHighlighted: boolean)
+	self._buttonModel._isHighlighted.Value = isHighlighted
+end
+
 function VisualizerInstanceEntry:Render(props)
 	local percentVisible = Blend.Spring(Blend.toPropertyObservable(self._percentVisibleTarget):Pipe({
 		Rx.startWith({0})

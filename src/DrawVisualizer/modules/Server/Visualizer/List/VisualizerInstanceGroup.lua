@@ -385,7 +385,7 @@ function VisualizerInstanceGroup:Render(props)
 		[Blend.OnChange "AbsoluteSize"] = self._absoluteSize;
 
 		[Blend.OnEvent "InputBegan"] = function(input)
-			if not self._isHovered.Value then
+			if not self._isHovered.Value or not self._hoverTarget then
 				return
 			end
 
@@ -393,6 +393,10 @@ function VisualizerInstanceGroup:Render(props)
 				self._rootEntry:SetIsPressed(true)
 			elseif input.KeyCode == Enum.KeyCode.LeftShift then
 				print(self.StartingDepth.Value)
+			elseif input.KeyCode == Enum.KeyCode.LeftControl then
+				Selection:Set({ self._hoverTarget.Instance.Value })
+			elseif input.KeyCode == Enum.KeyCode.Tab then
+				self.InstanceInspected:Fire(self._hoverTarget.Instance.Value)
 			end
 		end;
 
@@ -421,7 +425,7 @@ function VisualizerInstanceGroup:Render(props)
 					Thickness = 3;
 
 					Transparency = Blend.Computed(groupStrokeTransparency, function(percent)
-						return 1 - (percent * 0.35)
+						return 1 - (percent * 0.15)
 					end);
 				};
 			};
@@ -439,9 +443,9 @@ function VisualizerInstanceGroup:Render(props)
 					return false
 				end);
 
-				-- Position = Blend.Computed(transparency, function(percent)
-				-- 	return UDim2.fromScale(percent * -0.05, 0)
-				-- end);
+				Position = Blend.Computed(transparency, function(percent)
+					return UDim2.fromScale(percent * -0.05, 0)
+				end);
 
 				[Blend.Children] = {
 					Blend.New "UIListLayout" {

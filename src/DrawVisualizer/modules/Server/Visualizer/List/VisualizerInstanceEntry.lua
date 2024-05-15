@@ -24,8 +24,8 @@ VisualizerInstanceEntry.__index = VisualizerInstanceEntry
 function VisualizerInstanceEntry.new()
 	local self = setmetatable(BasicPane.new(), VisualizerInstanceEntry)
 
-	self._percentVisibleTarget = self._maid:Add(ValueObject.new(0))
 	self._percentCollapsedTarget = self._maid:Add(ValueObject.new(1))
+	self._percentVisibleTarget = self._maid:Add(ValueObject.new(0))
 
 	self.Instance = self._maid:Add(ValueObject.new(nil))
 	self.IsRootInstance = self._maid:Add(ValueObject.new(false))
@@ -54,6 +54,10 @@ function VisualizerInstanceEntry.new()
 	self._buttonModel = ButtonHighlightModel.new()
 
 	self._maid:GiveTask(self._buttonModel:ObserveIsHighlighted():Subscribe(function(isHighlighted)
+		if not isHighlighted then
+			self:SetIsPressed(false)
+		end
+
 		self.InstanceHovered:Fire(isHighlighted)
 	end))
 
@@ -84,6 +88,10 @@ function VisualizerInstanceEntry:SetInstance(instance: Instance)
 	self.Instance.Value = instance
 end
 
+function VisualizerInstanceEntry:SetIsPressed(isPressed: boolean)
+	self._buttonModel:SetKeyDown(isPressed)
+end
+
 function VisualizerInstanceEntry:Render(props)
 	local percentVisible = Blend.Spring(Blend.toPropertyObservable(self._percentVisibleTarget):Pipe({
 		Rx.startWith({0})
@@ -98,6 +106,7 @@ function VisualizerInstanceEntry:Render(props)
 	end)
 
 	local percentHighlighted = self._buttonModel:ObservePercentHighlighted()
+	local percentPressed = Blend.Spring(self._buttonModel:ObservePercentPressedTarget(), 50, 0.8);
 
 	local instanceData = self.Instance:Observe():Pipe({
 		Rx.where(function(instance)
@@ -145,11 +154,14 @@ function VisualizerInstanceEntry:Render(props)
 				Name = "guides";
 				AnchorPoint = Vector2.new(0, 0.5);
 				BackgroundTransparency = 1;
-				Image = "rbxassetid://17498834811";
-				ImageColor3 = Color3.fromRGB(54, 54, 54);
-				ImageTransparency = transparency;
-				Size = UDim2.new(0, 13, 1, 5);
+				Image = "rbxassetid://17499672765";
+				ImageColor3 = Color3.fromRGB(255, 255, 255);
+				Size = UDim2.new(0, 13, 1, 0);
 				ZIndex = 1;
+
+				ImageTransparency = Blend.Computed(transparency, function(percent)
+					return 0.95 + percent
+				end);
 
 				Position = Blend.Computed(self._depth, function(depth: number)
 					return UDim2.new(0, ((depth - 1) * INDENTATION_WIDTH) + 22, 0.5, 0);
@@ -231,9 +243,9 @@ function VisualizerInstanceEntry:Render(props)
 								BackgroundTransparency = 1;
 								FontFace = Font.new("rbxasset://fonts/families/BuilderSans.json");
 								LayoutOrder = 2;
+								TextSize = 16;
 								RichText = true;
 								Size = UDim2.fromScale(0, 1);
-								TextScaled = true;
 								TextTransparency = transparency;
 								TextXAlignment = Enum.TextXAlignment.Left;
 
@@ -250,7 +262,7 @@ function VisualizerInstanceEntry:Render(props)
 
 									if absoluteSize then
 										local x, y = math.round(absoluteSize.X), math.round(absoluteSize.Y)
-										text ..= ` <font family="rbxassetid://16658246179" color="#c59cf2">[{x} x {y}]</font>`
+										text ..= ` <font color="#c59cf2" family="rbxassetid://16658246179" size="14">[{x} x {y}]</font>`
 									end
 
 									self._className.Value = data.ClassName
@@ -310,13 +322,13 @@ function VisualizerInstanceEntry:Render(props)
 						AnchorPoint = Vector2.new(1, 0.5);
 						BackgroundTransparency = 1;
 						Image = "rbxassetid://6031091004";
-						ImageTransparency = transparency;
+						ImageColor3 = Color3.new(1, 1, 1);
 						Position = UDim2.fromScale(1, 0.5);
 						Size = UDim2.fromScale(1, 1);
 						ZIndex = 5;
 
-						ImageColor3 = Blend.Computed(percentCollapsed, function(percent)
-							return Color3.fromRGB(200, 200, 200):Lerp(Color3.fromRGB(100, 100, 100), percent)
+						ImageTransparency = Blend.Computed(transparency, percentCollapsed, percentHighlighted, function(percent, percentCollapse, percentHighlight)
+							return 0.7 - ((1 - percentCollapse) * 0.4) - (percentHighlight * 0.3) + percent
 						end);
 
 						Rotation = Blend.Computed(percentCollapsed, function(percent: number)
@@ -339,16 +351,25 @@ function VisualizerInstanceEntry:Render(props)
 			Blend.New "Frame" {
 				Name = "tab";
 				AnchorPoint = Vector2.new(0, 0.5);
-				Size = UDim2.new(0, 5, 1, 0);
 				BackgroundColor3 = Color3.fromRGB(200, 200, 200);
 				Position = UDim2.fromScale(0, 0.5);
 
-				BackgroundTransparency = Blend.Computed(transparency, percentHighlighted, self._descendantCount, function(percent, percentHighlight, count)
-					if count == 0 then
-						return 1
-					end
+				BackgroundTransparency = Blend.Computed(
+					transparency,
+					percentHighlighted,
+					percentCollapsed,
+					self._descendantCount,
+					function(percent, percentHighlight, percentCollapse, count)
+						if count == 0 then
+							return 1
+						end
 
-					return 0.9 - (percentHighlight * 0.5) + percent
+						return 0.85 - (percentHighlight * 0.65) - ((1 - percentCollapse) * 0.2) + percent
+					end
+				);
+
+				Size = Blend.Computed(percentHighlighted, percentPressed, function(percentHighlight, percentPress)
+					return UDim2.new(0, 5 + (percentHighlight * 2) - (percentPress * 4), 1, 0);
 				end);
 			};
 
@@ -360,7 +381,7 @@ function VisualizerInstanceEntry:Render(props)
 				ZIndex = 2;
 
 				BackgroundTransparency = Blend.Computed(percentHighlighted, function(percent)
-					return 1 - (0.15 * percent)
+					return 1 - (0.1 * percent)
 				end);
 			};
 		};

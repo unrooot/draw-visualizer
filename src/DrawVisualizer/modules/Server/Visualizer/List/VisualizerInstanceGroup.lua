@@ -132,8 +132,17 @@ function VisualizerInstanceGroup:AddObject(instanceEntry, depth: number)
 
 		maid:GiveTask(instanceEntry.InstanceHovered:Connect(function(isHovered: boolean)
 			if not isHovered and (instanceEntry ~= self._hoverTarget) then
+				if self._hoverTarget and self._hoverTarget == instanceEntry then
+					self._isHovered.Value = false
+					self.InstanceHovered:Fire(nil)
+				end
+
 				return
 			end
+
+			-- if self._hoverTarget and self._hoverTarget ~= instanceEntry then
+			-- 	self._hoverTarget:SetIsHighlighted(false)
+			-- end
 
 			self._hoverTarget = instanceEntry
 
@@ -362,7 +371,7 @@ function VisualizerInstanceGroup:Render(props)
 		Parent = props.Parent;
 
 		BackgroundTransparency = Blend.Computed(groupStrokeTransparency, function(percent)
-			return 1 - (percent * 0.02)
+			return 1 - (percent * 0.04)
 		end);
 
 		LayoutOrder = Blend.Computed(self._layoutOrder, function(layoutOrder)
@@ -376,11 +385,26 @@ function VisualizerInstanceGroup:Render(props)
 		[Blend.OnChange "AbsoluteSize"] = self._absoluteSize;
 
 		[Blend.OnEvent "InputBegan"] = function(input)
-			if input.KeyCode == Enum.KeyCode.Tab then
-				if self._isHovered.Value then
-					self._collapsed.Value = not self._collapsed.Value
-					self._rootEntry:SetCollapsed(self._collapsed.Value)
-				end
+			if not self._isHovered.Value then
+				return
+			end
+
+			if input.KeyCode == Enum.KeyCode.Space then
+				self._rootEntry:SetIsPressed(true)
+			elseif input.KeyCode == Enum.KeyCode.LeftShift then
+				print(self.StartingDepth.Value)
+			end
+		end;
+
+		[Blend.OnEvent "InputEnded"] = function(input)
+			if not self._isHovered.Value then
+				return
+			end
+
+			if input.KeyCode == Enum.KeyCode.Space then
+				self._collapsed.Value = not self._collapsed.Value
+				self._rootEntry:SetCollapsed(self._collapsed.Value)
+				self._rootEntry:SetIsPressed(false)
 			end
 		end;
 
@@ -397,7 +421,7 @@ function VisualizerInstanceGroup:Render(props)
 					Thickness = 3;
 
 					Transparency = Blend.Computed(groupStrokeTransparency, function(percent)
-						return 1 - (percent * 0.3)
+						return 1 - (percent * 0.35)
 					end);
 				};
 			};
@@ -423,7 +447,7 @@ function VisualizerInstanceGroup:Render(props)
 					Blend.New "UIListLayout" {
 						FillDirection = Enum.FillDirection.Vertical;
 						HorizontalAlignment = Enum.HorizontalAlignment.Center;
-						Padding = UDim.new(0, 5);
+						Padding = UDim.new(0, 0);
 						SortOrder = Enum.SortOrder.LayoutOrder;
 						VerticalAlignment = Enum.VerticalAlignment.Top;
 
@@ -443,9 +467,9 @@ function VisualizerInstanceGroup:Render(props)
 			Name = "alternatingColors";
 			Size = UDim2.fromScale(1, 1);
 			BackgroundTransparency = 1;
-			Image = "rbxassetid://17468337820";
+			Image = "rbxassetid://17468241397";
 			ScaleType = Enum.ScaleType.Tile;
-			TileSize = UDim2.new(1, 0, 0, 70);
+			TileSize = UDim2.new(1, 0, 0, 60);
 			ZIndex = 0;
 
 			Visible = Blend.Computed(self.StartingDepth, function(depth)

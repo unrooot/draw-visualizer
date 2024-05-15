@@ -6,8 +6,12 @@ local UserInputService = game:GetService("UserInputService")
 local BasicPane = require("BasicPane")
 local BasicPaneUtils = require("BasicPaneUtils")
 local Blend = require("Blend")
+local Brio = require("Brio")
 local ButtonHighlightModel = require("ButtonHighlightModel")
+local Observable = require("Observable")
 local Rx = require("Rx")
+local RxBrioUtils = require("RxBrioUtils")
+local RxInstanceUtils = require("RxInstanceUtils")
 local Signal = require("Signal")
 local ValueObject = require("ValueObject")
 
@@ -20,25 +24,24 @@ VisualizerInstanceEntry.__index = VisualizerInstanceEntry
 function VisualizerInstanceEntry.new()
 	local self = setmetatable(BasicPane.new(), VisualizerInstanceEntry)
 
-	self.IsRootInstance = self._maid:Add(ValueObject.new(false))
-
 	self._percentVisibleTarget = self._maid:Add(ValueObject.new(0))
 	self._percentCollapsedTarget = self._maid:Add(ValueObject.new(1))
 
+	self.Instance = self._maid:Add(ValueObject.new(nil))
+	self.IsRootInstance = self._maid:Add(ValueObject.new(false))
+
 	self._absoluteSize = self._maid:Add(ValueObject.new(Vector2.new()))
-	self._childCount = self._maid:Add(ValueObject.new(0))
+	self._className = self._maid:Add(ValueObject.new(""))
 	self._depth = self._maid:Add(ValueObject.new(0))
+	self._descendantCount = self._maid:Add(ValueObject.new(0))
 	self._iconData = self._maid:Add(ValueObject.new({}))
-	self._instanceAbsoluteSize = self._maid:Add(ValueObject.new(Vector2.new()))
-	self._instanceName = self._maid:Add(ValueObject.new(""))
+	self._isCollapsed = self._maid:Add(ValueObject.new(true))
 	self._layoutOrder = self._maid:Add(ValueObject.new(0))
 
-	self._isCollapsed = self._maid:Add(ValueObject.new(true))
 	self._maid:GiveTask(self._isCollapsed.Changed:Connect(function()
 		self._percentCollapsedTarget.Value = self._isCollapsed.Value and 1 or 0
 	end))
 
-	self._className = self._maid:Add(ValueObject.new(""))
 	self._maid:GiveTask(self._className.Changed:Connect(function()
 		self._iconData.Value = StudioService:GetClassIcon(self._className.Value)
 	end))
@@ -49,6 +52,7 @@ function VisualizerInstanceEntry.new()
 	self.InstancePicked = self._maid:Add(Signal.new())
 
 	self._buttonModel = ButtonHighlightModel.new()
+
 	self._maid:GiveTask(self._buttonModel:ObserveIsHighlighted():Subscribe(function(isHighlighted)
 		self.InstanceHovered:Fire(isHighlighted)
 	end))
@@ -77,15 +81,7 @@ function VisualizerInstanceEntry:SetCollapsed(isCollapsed: boolean)
 end
 
 function VisualizerInstanceEntry:SetInstance(instance: Instance)
-	self.Instance = instance
-
-	self._className.Value = instance.ClassName
-	self._instanceName.Value = instance.Name
-	self._childCount.Value = #instance:GetDescendants()
-
-	if instance:IsA("GuiObject") then
-		self._instanceAbsoluteSize.Value = instance.AbsoluteSize
-	end
+	self.Instance.Value = instance
 end
 
 function VisualizerInstanceEntry:Render(props)
@@ -101,8 +97,39 @@ function VisualizerInstanceEntry:Render(props)
 		return 1 - percent
 	end)
 
+	local percentHighlighted = self._buttonModel:ObservePercentHighlighted()
+
+	local instanceData = self.Instance:Observe():Pipe({
+		Rx.where(function(instance)
+			return instance ~= nil
+		end);
+
+		Rx.switchMap(function(instance)
+			local function getDescendantCount()
+				return #instance:GetDescendants()
+			end
+
+			return Rx.combineLatest({
+				AbsoluteSize = instance:IsA("GuiObject") and RxInstanceUtils.observeProperty(instance, "AbsoluteSize") or nil;
+				ClassName = Rx.of(instance.ClassName);
+				Name = RxInstanceUtils.observeProperty(instance, "Name");
+				DescendantCount = Rx.merge({
+					Rx.of(getDescendantCount());
+					Rx.fromSignal(instance.DescendantAdded):Pipe({
+						Rx.map(getDescendantCount);
+					});
+					Rx.fromSignal(instance.DescendantRemoving):Pipe({
+						Rx.map(function()
+							return getDescendantCount() - 1
+						end)
+					});
+				});
+			})
+		end)
+	})
+
 	return Blend.New "Frame" {
-		Name = self._instanceName;
+		Name = "VisualizerInstanceEntry";
 		BackgroundTransparency = 1;
 		Size = UDim2.new(1, 0, 0, 30);
 		Parent = props.Parent;
@@ -114,40 +141,23 @@ function VisualizerInstanceEntry:Render(props)
 		[Blend.OnChange "AbsoluteSize"] = self._absoluteSize;
 
 		[Blend.Children] = {
-			Blend.New "Frame" {
+			Blend.New "ImageLabel" {
 				Name = "guides";
 				AnchorPoint = Vector2.new(0, 0.5);
 				BackgroundTransparency = 1;
-				Size = UDim2.new(0, 16, 1, 5);
+				Image = "rbxassetid://17498834811";
+				ImageColor3 = Color3.fromRGB(54, 54, 54);
+				ImageTransparency = transparency;
+				Size = UDim2.new(0, 13, 1, 5);
 				ZIndex = 1;
+
+				Position = Blend.Computed(self._depth, function(depth: number)
+					return UDim2.new(0, ((depth - 1) * INDENTATION_WIDTH) + 22, 0.5, 0);
+				end);
 
 				Visible = Blend.Computed(self._depth, function(depth: number)
 					return depth ~= 0
 				end);
-
-				Position = Blend.Computed(self._depth, function(depth: number)
-					return UDim2.new(0, ((depth - 1) * 30) + 5, 0.5, 0);
-				end);
-
-				[Blend.Children] = {
-					Blend.New "Frame" {
-						Name = "vertical";
-						AnchorPoint = Vector2.new(0.5, 0);
-						BackgroundColor3 = Color3.fromRGB(54, 54, 54);
-						BackgroundTransparency = transparency;
-						Position = UDim2.fromScale(0.5, 0);
-						Size = UDim2.new(0, 2, 1, 0);
-					};
-
-					Blend.New "Frame" {
-						Name = "horizontal";
-						AnchorPoint = Vector2.new(0, 0.5);
-						BackgroundColor3 = Color3.fromRGB(54, 54, 54);
-						BackgroundTransparency = transparency;
-						Position = UDim2.fromScale(0.5, 0.5);
-						Size = UDim2.new(0.75, 0, 0, 2);
-					};
-				};
 			};
 
 			Blend.New "Frame" {
@@ -176,9 +186,9 @@ function VisualizerInstanceEntry:Render(props)
 							Blend.New "UIPadding" {
 								PaddingLeft = Blend.Computed(self._depth, self._absoluteSize, function(depth: number, absoluteSize: Vector2)
 									if depth > 0 then
-										return UDim.new((depth * INDENTATION_WIDTH) / absoluteSize.X, 0)
+										return UDim.new(((depth * INDENTATION_WIDTH) / absoluteSize.X) + (10 / absoluteSize.X), 0)
 									else
-										return UDim.new()
+										return UDim.new(10 / absoluteSize.X, 0)
 									end
 								end);
 							};
@@ -193,15 +203,15 @@ function VisualizerInstanceEntry:Render(props)
 								SliceCenter = Rect.new(0, 0, 16, 16);
 
 								Image = Blend.Computed(self._iconData, function(data)
-									return data.Image
+									return data.Image or ""
 								end);
 
 								ImageRectOffset = Blend.Computed(self._iconData, function(data)
-									return data.ImageRectOffset
+									return data.ImageRectOffset or Vector2.new()
 								end);
 
 								ImageRectSize = Blend.Computed(self._iconData, function(data)
-									return data.ImageRectSize
+									return data.ImageRectSize or Vector2.new()
 								end);
 
 								[Blend.Children] = {
@@ -217,24 +227,34 @@ function VisualizerInstanceEntry:Render(props)
 
 							Blend.New "TextLabel" {
 								Name = "label";
+								AutomaticSize = Enum.AutomaticSize.X;
 								BackgroundTransparency = 1;
+								FontFace = Font.new("rbxasset://fonts/families/BuilderSans.json");
 								LayoutOrder = 2;
 								RichText = true;
-								Size = UDim2.fromScale(0.941, 1);
+								Size = UDim2.fromScale(0, 1);
 								TextScaled = true;
 								TextTransparency = transparency;
 								TextXAlignment = Enum.TextXAlignment.Left;
 
-								Text = Blend.Computed(self._childCount, self._instanceName, self._instanceAbsoluteSize, function(childCount, name, absoluteSize)
-									local text = string.format("<font face=\"Gotham\" weight=\"Bold\">%s</font>", name)
+								Text = Blend.Computed(instanceData, function(data)
+									local name = data.Name
+									local descendantCount = data.DescendantCount
+									local absoluteSize = data.AbsoluteSize
 
-									if childCount > 0 then
-										text = string.format("<font color=\"#c8c8c8\">(%d)</font> ", childCount) .. text
+									local text = `<b>{name}</b>`
+
+									if descendantCount and descendantCount > 0 then
+										text = `<font family="rbxassetid://16658246179" color="#707070">({descendantCount})</font> ` .. text
 									end
 
-									if self.Instance:IsA("GuiObject") then
-										text ..= string.format(" <font color=\"#c59cf2\">[%d x %d]</font>", absoluteSize.X, absoluteSize.Y)
+									if absoluteSize then
+										local x, y = math.round(absoluteSize.X), math.round(absoluteSize.Y)
+										text ..= ` <font family="rbxassetid://16658246179" color="#c59cf2">[{x} x {y}]</font>`
 									end
+
+									self._className.Value = data.ClassName
+									self._descendantCount.Value = descendantCount
 
 									return text
 								end);
@@ -274,9 +294,9 @@ function VisualizerInstanceEntry:Render(props)
 
 								self.Activated:Fire(ctrlPressed)
 							elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
-								self.InstanceInspected:Fire(self.Instance)
+								self.InstanceInspected:Fire(self.Instance.Value)
 							elseif input.UserInputType == Enum.UserInputType.MouseButton3 then
-								self.InstancePicked:Fire(self.Instance)
+								self.InstancePicked:Fire(self.Instance.Value)
 							end
 						end;
 
@@ -289,17 +309,21 @@ function VisualizerInstanceEntry:Render(props)
 						Name = "dropdown";
 						AnchorPoint = Vector2.new(1, 0.5);
 						BackgroundTransparency = 1;
-						Image = "rbxassetid://6031090990";
+						Image = "rbxassetid://6031091004";
 						ImageTransparency = transparency;
 						Position = UDim2.fromScale(1, 0.5);
 						Size = UDim2.fromScale(1, 1);
 						ZIndex = 5;
 
+						ImageColor3 = Blend.Computed(percentCollapsed, function(percent)
+							return Color3.fromRGB(200, 200, 200):Lerp(Color3.fromRGB(100, 100, 100), percent)
+						end);
+
 						Rotation = Blend.Computed(percentCollapsed, function(percent: number)
 							return percent * 180
 						end);
 
-						Visible = Blend.Computed(self._childCount, function(count: number)
+						Visible = Blend.Computed(self._descendantCount, function(count: number)
 							return count > 0
 						end);
 
@@ -313,13 +337,29 @@ function VisualizerInstanceEntry:Render(props)
 			};
 
 			Blend.New "Frame" {
+				Name = "tab";
+				AnchorPoint = Vector2.new(0, 0.5);
+				Size = UDim2.new(0, 5, 1, 0);
+				BackgroundColor3 = Color3.fromRGB(200, 200, 200);
+				Position = UDim2.fromScale(0, 0.5);
+
+				BackgroundTransparency = Blend.Computed(transparency, percentHighlighted, self._descendantCount, function(percent, percentHighlight, count)
+					if count == 0 then
+						return 1
+					end
+
+					return 0.9 - (percentHighlight * 0.5) + percent
+				end);
+			};
+
+			Blend.New "Frame" {
 				Name = "backing";
 				AnchorPoint = Vector2.new(0.5, 0.5);
 				Position = UDim2.fromScale(0.5, 0.5);
 				Size = UDim2.fromScale(1, 1);
 				ZIndex = 2;
 
-				BackgroundTransparency = Blend.Computed(self._buttonModel:ObservePercentHighlighted(), function(percent)
+				BackgroundTransparency = Blend.Computed(percentHighlighted, function(percent)
 					return 1 - (0.15 * percent)
 				end);
 			};

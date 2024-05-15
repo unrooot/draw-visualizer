@@ -37,6 +37,7 @@ function VisualizerInstanceGroup.new(rootInstance: Instance, startingDepth: numb
 	self._layoutOrder = self._maid:Add(ValueObject.new(0))
 	self._absoluteSize = self._maid:Add(ValueObject.new(Vector2.new()))
 	self._contentSize = self._maid:Add(ValueObject.new(Vector2.new()))
+	self._isHovered = self._maid:Add(ValueObject.new(false))
 
 	self._percentVisibleTarget = self._maid:Add(ValueObject.new(0))
 	self._percentCollapsedTarget = self._maid:Add(ValueObject.new(1))
@@ -73,6 +74,10 @@ function VisualizerInstanceGroup:AddObject(instanceEntry, depth: number)
 	local className = instanceEntry.ClassName
 	local instance = instanceEntry.Instance
 	local layoutOrder
+
+	if instance then
+		instance = instance.Value
+	end
 
 	if self._maid[instance] then
 		return
@@ -126,17 +131,24 @@ function VisualizerInstanceGroup:AddObject(instanceEntry, depth: number)
 		end))
 
 		maid:GiveTask(instanceEntry.InstanceHovered:Connect(function(isHovered: boolean)
+			if not isHovered and (instanceEntry ~= self._hoverTarget) then
+				return
+			end
+
+			self._hoverTarget = instanceEntry
+
 			for _, inputObject in UserInputService:GetKeysPressed() do
 				if inputObject.KeyCode == Enum.KeyCode.LeftControl then
 					Selection:Set({instance})
 				end
 			end
 
+			self._isHovered.Value = isHovered
 			self.InstanceHovered:Fire(isHovered and instance or nil)
 		end))
 
 		maid:GiveTask(instanceEntry.Activated:Connect(function(ctrlPressed: boolean)
-			instance = instanceEntry.Instance
+			instance = instanceEntry.Instance.Value
 			if not instance then
 				return
 			end
@@ -339,10 +351,19 @@ function VisualizerInstanceGroup:Render(props)
 		return 1 - percent
 	end)
 
+	local groupStrokeTransparency = Blend.AccelTween(self._isHovered:Observe():Pipe({
+		Rx.map(function(isHovered)
+			return isHovered and 1 or 0
+		end)
+	}), 400)
+
 	return Blend.New "Frame" {
 		Name = "VisualizerInstanceGroup";
-		BackgroundTransparency = 1;
 		Parent = props.Parent;
+
+		BackgroundTransparency = Blend.Computed(groupStrokeTransparency, function(percent)
+			return 1 - (percent * 0.02)
+		end);
 
 		LayoutOrder = Blend.Computed(self._layoutOrder, function(layoutOrder)
 			return layoutOrder
@@ -354,7 +375,33 @@ function VisualizerInstanceGroup:Render(props)
 
 		[Blend.OnChange "AbsoluteSize"] = self._absoluteSize;
 
+		[Blend.OnEvent "InputBegan"] = function(input)
+			if input.KeyCode == Enum.KeyCode.Tab then
+				if self._isHovered.Value then
+					self._collapsed.Value = not self._collapsed.Value
+					self._rootEntry:SetCollapsed(self._collapsed.Value)
+				end
+			end
+		end;
+
 		[Blend.Children] = {
+			Blend.New "Frame" {
+				Name = "outline";
+				AnchorPoint = Vector2.new(0.5, 0.5);
+				BackgroundTransparency = 1;
+				Position = UDim2.fromScale(0.5, 0.5);
+				Size = UDim2.new(1, -6, 1, 0);
+
+				Blend.New "UIStroke" {
+					Color = Color3.new(1, 1, 1);
+					Thickness = 3;
+
+					Transparency = Blend.Computed(groupStrokeTransparency, function(percent)
+						return 1 - (percent * 0.3)
+					end);
+				};
+			};
+
 			Blend.New "Frame" {
 				Name = "wrapper";
 				BackgroundTransparency = 1;
@@ -368,10 +415,9 @@ function VisualizerInstanceGroup:Render(props)
 					return false
 				end);
 
-				Position = Blend.Computed(transparency, function(percent)
-					return UDim2.fromScale(Math.map(percent, 0, 1, 0, -0.3), 0)
-				end);
-
+				-- Position = Blend.Computed(transparency, function(percent)
+				-- 	return UDim2.fromScale(percent * -0.05, 0)
+				-- end);
 
 				[Blend.Children] = {
 					Blend.New "UIListLayout" {

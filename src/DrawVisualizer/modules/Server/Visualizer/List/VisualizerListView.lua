@@ -151,19 +151,8 @@ function VisualizerListView:Render(props)
 
 				[Blend.Children] = {
 					Blend.New "UIPadding" {
-						PaddingLeft = UDim.new(0, 10);
 						PaddingTop = UDim.new(0, 10);
 						PaddingBottom = UDim.new(0, 10);
-
-						PaddingRight = Blend.Computed(self._contentHeight, function(height: number)
-							local size = self._absoluteSize.Value
-
-							if height > size.Y then
-								return UDim.new(10 / size.X, 0)
-							else
-								return UDim.new(0, 15)
-							end
-						end);
 					};
 
 					Blend.New "UIListLayout" {
@@ -187,7 +176,7 @@ function VisualizerListView:Render(props)
 									self._currentGroup = nil
 								end
 
-								return
+								return Rx.EMPTY
 							end
 
 							local depth = 0

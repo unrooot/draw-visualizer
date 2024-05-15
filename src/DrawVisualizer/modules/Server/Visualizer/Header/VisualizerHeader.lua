@@ -51,6 +51,10 @@ function VisualizerHeader:Render(props)
 		return 1 - percent
 	end)
 
+	local backgroundColor = Blend.Computed(percentFocused, function(percent)
+		return LuvColor3Utils.lerp(self._inactiveColor, self._focusedColor, percent)
+	end)
+
 	return Blend.New "Frame" {
 		Name = "VisualizerHeader";
 		BackgroundTransparency = 1;
@@ -66,9 +70,7 @@ function VisualizerHeader:Render(props)
 				BackgroundTransparency = transparency;
 				Size = UDim2.fromScale(1, 0.333);
 
-				BackgroundColor3 = Blend.Computed(percentFocused, function(percent)
-						return LuvColor3Utils.lerp(self._inactiveColor, self._focusedColor, percent)
-				end);
+				BackgroundColor3 = backgroundColor;
 
 				Position = Blend.Computed(transparency, function(percent)
 					return UDim2.fromScale(-percent, 0)
@@ -81,13 +83,16 @@ function VisualizerHeader:Render(props)
 						Name = "label";
 						AnchorPoint = Vector2.new(0.5, 0.5);
 						BackgroundTransparency = 1;
-						FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.ExtraBold, Enum.FontStyle.Normal);
+						FontFace = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.ExtraBold, Enum.FontStyle.Normal);
 						Position = UDim2.fromScale(0.5, 0.5);
 						Size = UDim2.fromScale(1, 1);
 						Text = "draw visualizer";
-						TextColor3 = Color3.new(1, 1, 1);
 						TextScaled = true;
 						TextTransparency = transparency;
+
+						TextColor3 = Blend.Computed(percentFocused, backgroundColor, function(percent, color)
+							return LuvColor3Utils.darken(color, 0.75 - ((1 - percent) * 0.35))
+						end);
 
 						[Blend.Children] = {
 							Blend.New "UITextSizeConstraint" {
@@ -100,6 +105,7 @@ function VisualizerHeader:Render(props)
 
 			self._buttons:Render({
 				AbsoluteRootSize = props.AbsoluteRootSize;
+				RootInstance = props.RootInstance;
 				Parent = props.Parent;
 			})
 		};

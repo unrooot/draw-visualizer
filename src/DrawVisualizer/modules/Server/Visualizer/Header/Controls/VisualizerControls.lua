@@ -110,6 +110,7 @@ function VisualizerControls:Render(props)
 				return button:Render({
 					AbsoluteRootSize = props.AbsoluteRootSize;
 					ButtonCount = self._buttonCount;
+					RootInstance = props.RootInstance;
 					Parent = props.Parent;
 				})
 			end);

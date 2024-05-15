@@ -66,19 +66,19 @@ function VisualizerControlButton:Render(props)
 		return 1 - percent
 	end)
 
-	local percentHighlight = Blend.Computed(self._buttonModel:ObservePercentHighlighted(), function(percent)
+	local percentHighlighted = Blend.Computed(self._buttonModel:ObservePercentHighlighted(), function(percent)
 		return percent
 	end);
 
-	local percentPress = Blend.Computed(self._buttonModel:ObservePercentPressed(), function(percent)
+	local percentPressed = Blend.Computed(self._buttonModel:ObservePercentPressed(), function(percent)
 		return percent
 	end);
 
-	local percentChoose = Blend.Computed(self._buttonModel:ObservePercentChoosen(), function(percent)
+	local percentChosen = Blend.Computed(self._buttonModel:ObservePercentChoosen(), function(percent)
 		return percent
 	end);
 
-	local baseColor = Color3.fromRGB(72, 72, 72)
+	local baseColor = Color3.fromRGB(65, 65, 65)
 
 	return Blend.New "Frame" {
 		Name = "VisualizerControlButton";
@@ -117,8 +117,8 @@ function VisualizerControlButton:Render(props)
 				BackgroundTransparency = transparency;
 				Size = UDim2.fromScale(1, 1);
 
-				BackgroundColor3 = Blend.Computed(percentHighlight, percentChoose, percentPress, function(highlight, choose, press)
-					local percent = highlight + (choose / 2) + press
+				BackgroundColor3 = Blend.Computed(percentHighlighted, percentChosen, percentPressed, function(percentHighlight, percentChose, percentPress)
+					local percent = percentHighlight + percentChose + (percentPress * 0.5)
 
 					return baseColor:Lerp(Color3.fromRGB(90, 90, 90), percent);
 				end);
@@ -132,12 +132,23 @@ function VisualizerControlButton:Render(props)
 
 					Blend.New "TextLabel" {
 						BackgroundTransparency = 1;
-						FontFace = Font.new("rbxasset://fonts/families/Inconsolata.json", Enum.FontWeight.Medium, Enum.FontStyle.Normal);
+						FontFace = Font.new("rbxassetid://16658246179", Enum.FontWeight.Medium, Enum.FontStyle.Normal);
 						Size = UDim2.fromScale(1, 1);
 						Text = self._text;
-						TextColor3 = Color3.new(1, 1, 1);
 						TextScaled = true;
 						TextTransparency = transparency;
+
+						TextColor3 = Blend.Computed(self._text, props.RootInstance, function(text, instance)
+							if text == "choose target" then
+								return Color3.new(1, 1, 1)
+							end
+
+							if instance then
+								return Color3.new(1, 1, 1)
+							else
+								return Color3.fromRGB(100, 100, 100)
+							end
+						end);
 
 						[Blend.Children] = {
 							Blend.New "UITextSizeConstraint" {

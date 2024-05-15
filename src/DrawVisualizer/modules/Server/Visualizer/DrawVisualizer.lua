@@ -195,6 +195,7 @@ function DrawVisualizer:Render(props)
 					self._header:Render({
 						AbsoluteRootSize = self._absoluteSize;
 						IsFocused = self._isFocused;
+						RootInstance = self._rootInstance;
 						Parent = props.Parent;
 					});
 

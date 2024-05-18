@@ -8,6 +8,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local BasicPane = require("BasicPane")
 local Blend = require("Blend")
+local CommandPalette = require("CommandPalette")
 local Maid = require("Maid")
 local PlayerGuiUtils = require("PlayerGuiUtils")
 local Rx = require("Rx")
@@ -39,7 +40,6 @@ function DrawVisualizer.new(isHoarcekat: boolean)
 	self._hoverTarget = self._maid:Add(ValueObject.new(nil))
 
 	self._percentVisibleTarget = self._maid:Add(ValueObject.new(0))
-	self._propertiesVisibleTarget = self._maid:Add(ValueObject.new(0))
 
 	self._maid:GiveTask(self._objectIndex.Changed:Connect(function()
 		local objects = self._currentObjects.Value
@@ -115,6 +115,8 @@ function DrawVisualizer.new(isHoarcekat: boolean)
 			end
 
 			self:SetTargetSearchEnabled(not self._targetSearchEnabled.Value)
+		elseif buttonName == "properties" then
+			self:InspectInstance(self._rootInstance.Value)
 		end
 	end))
 
@@ -170,8 +172,37 @@ function DrawVisualizer:SetRootInstance(instance: Instance)
 end
 
 function DrawVisualizer:InspectInstance(instance: Instance?)
+	if not self._properties then
+		return
+	end
+
 	self._propertiesVisible.Value = not self._propertiesVisible.Value
-	self._propertiesVisibleTarget.Value = self._propertiesVisible.Value and 1 or 0
+
+	local maid = Maid.new()
+
+	local palette = maid:Add(CommandPalette.new(instance))
+
+	maid:GiveTask(palette:Render({
+		Position = UDim2.fromScale(0.5, 0);
+		Size = UDim2.fromScale(1, 1);
+		Parent = self._properties;
+	}):Subscribe(function()
+		palette:Show()
+		palette:SetInputFocused(true)
+	end))
+
+	maid:GiveTask(self._propertiesVisible:Observe():Subscribe(function(isVisible)
+		if not isVisible then
+			palette:Hide()
+			task.delay(0.5, function()
+				maid:Destroy()
+			end)
+		end
+	end))
+
+	maid:GiveTask(palette.EscapePressed:Connect(function()
+		self._propertiesVisible.Value = false
+	end))
 end
 
 function DrawVisualizer:Render(props)
@@ -179,9 +210,12 @@ function DrawVisualizer:Render(props)
 		Rx.startWith({0})
 	}), 30, 0.9)
 
-	local percentPropertiesVisible = Blend.Spring(Blend.toPropertyObservable(self._propertiesVisibleTarget):Pipe({
-		Rx.startWith({0})
-	}), 30, 0.9)
+	local percentPropertiesVisible = Blend.Spring(Blend.toPropertyObservable(self._propertiesVisible:Observe():Pipe({
+		Rx.map(function(visible)
+			return visible and 1 or 0
+		end)
+		})
+	), 30, 0.9)
 
 	local transparency = Blend.Computed(percentVisible, function(percent)
 		return 1 - percent

@@ -114,7 +114,7 @@ function CommandPaletteSearch:Render()
 
 	local percentAlpha = Blend.Spring(Blend.toPropertyObservable(self._percentVisibleTarget):Pipe({
 		Rx.startWith({0})
-	}), 800)
+	}), 100)
 
 	local transparency = Blend.Computed(percentAlpha, function(percent)
 		return 1 - percent
@@ -155,41 +155,9 @@ function CommandPaletteSearch:Render()
 
 			Blend.New "Frame" {
 				Name = "bar";
-				BackgroundTransparency = 1;
+				BackgroundColor3 = Color3.fromRGB(197, 156, 242);
+				BackgroundTransparency = transparency;
 				Size = UDim2.fromScale(1, 0.192);
-
-				[Blend.Children] = {
-					Blend.New "CanvasGroup" {
-						Name = "wrapper";
-						BackgroundColor3 = Color3.fromRGB(255, 255, 255);
-						BackgroundTransparency = 1;
-						GroupTransparency = transparency;
-						Size = UDim2.fromScale(1, 1);
-
-						[Blend.Children] = {
-							Blend.New "Frame" {
-								Name = "backing";
-								BackgroundColor3 = Color3.fromRGB(197, 156, 242);
-								Size = UDim2.fromScale(1, 1);
-
-								[Blend.Children] = {
-									Blend.New "UICorner" {
-										CornerRadius = UDim.new(0.4, 0);
-									};
-								};
-							};
-
-							Blend.New "Frame" {
-								Name = "cover";
-							AnchorPoint = Vector2.new(0, 1);
-								BackgroundColor3 = Color3.fromRGB(197, 156, 242);
-								Position = UDim2.fromScale(0, 1);
-								Size = UDim2.fromScale(1, 0.4);
-								ZIndex = 2;
-							};
-						};
-					}
-				};
 			};
 
 			Blend.New "Frame" {
@@ -204,11 +172,11 @@ function CommandPaletteSearch:Render()
 				-- end);
 
 				[Blend.Children] = {
-					Blend.New "UICorner" {
-						CornerRadius = Blend.Computed(cornerSpring, function(percent)
-							return UDim.new(percent * 0.095, 0)
-						end);
-					};
+					-- Blend.New "UICorner" {
+					-- 	CornerRadius = Blend.Computed(cornerSpring, function(percent)
+					-- 		return UDim.new(percent * 0.095, 0)
+					-- 	end);
+					-- };
 
 					Blend.New "Frame" {
 						Name = "container";

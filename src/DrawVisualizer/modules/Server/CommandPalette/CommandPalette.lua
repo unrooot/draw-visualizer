@@ -123,9 +123,10 @@ function CommandPalette:Render(props)
 	end)
 
 	local percentResults = Blend.Spring(self._search:ObserveQuery():Pipe({
+		Rx.defaultsTo(0);
 		Rx.map(function(query)
 			return query == "" and 0 or 1
-		end)
+		end);
 	}), 50, 1)
 
 	local searchSize = Blend.Spring(self._search:ObserveSize():Pipe({
@@ -146,7 +147,7 @@ function CommandPalette:Render(props)
 		Parent = props.Parent;
 
 		Position = props.Position or Blend.Computed(percentVisible, function(percent)
-			return UDim2.fromScale(0.5, 0.2 + ((1 - percent) * 0.1));
+			return UDim2.fromScale(0.5, 0); --0.2 + ((1 - percent) * 0.1));
 		end);
 
 		BackgroundTransparency = Blend.Computed(transparency, function(percent)
@@ -168,11 +169,11 @@ function CommandPalette:Render(props)
 				end);
 			};
 
-			Blend.New "UIScale" {
-				Scale = Blend.Computed(percentVisible, function(percent)
-					return 1 - ((1 - percent) * 0.15)
-				end);
-			};
+			-- Blend.New "UIScale" {
+			-- 	Scale = Blend.Computed(percentVisible, function(percent)
+			-- 		return 1 - ((1 - percent) * 0.15)
+			-- 	end);
+			-- };
 
 			Blend.New "UIStroke" {
 				Color = Color3.fromRGB(255, 255, 255);
@@ -182,11 +183,11 @@ function CommandPalette:Render(props)
 				end);
 			};
 
-			Blend.New "UICorner" {
-				CornerRadius = Blend.Computed(self._bounds, function(bounds)
-					return UDim.new(10 / bounds.Y, 0)
-				end);
-			};
+			-- Blend.New "UICorner" {
+			-- 	CornerRadius = Blend.Computed(self._bounds, function(bounds)
+			-- 		return UDim.new(10 / bounds.Y, 0)
+			-- 	end);
+			-- };
 
 			Blend.New "ImageLabel" {
 				Name = "shadow";

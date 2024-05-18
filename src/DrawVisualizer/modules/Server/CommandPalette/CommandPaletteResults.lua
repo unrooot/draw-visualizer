@@ -133,11 +133,11 @@ function CommandPaletteResults:Render(props)
 							return UDim2.new(1, 0, 0, (50 / 500) * bounds.Y)
 						end);
 
-						[Blend.Children] = {
-							Blend.New "UICorner" {
-								CornerRadius = UDim.new(0.177778, 0);
-							};
-						};
+						-- [Blend.Children] = {
+						-- 	Blend.New "UICorner" {
+						-- 		CornerRadius = UDim.new(0.177778, 0);
+						-- 	};
+						-- };
 					};
 
 					Blend.New "ScrollingFrame" {

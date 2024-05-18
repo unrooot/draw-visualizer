@@ -133,7 +133,7 @@ function ResultEntry:Render(props)
 						Name = "label";
 						AutomaticSize = Enum.AutomaticSize.X;
 						BackgroundTransparency = 1;
-						FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json");
+						FontFace = Font.new("rbxasset://fonts/families/BuilderSans.json");
 						LayoutOrder = 1;
 						Size = UDim2.fromScale(0, 1);
 						Text = self._propertyName;
@@ -182,7 +182,7 @@ function ResultEntry:Render(props)
 								Name = "label";
 								AutomaticSize = Enum.AutomaticSize.X;
 								BackgroundTransparency = 1;
-								FontFace = Font.new("rbxasset://fonts/families/Inconsolata.json", Enum.FontWeight.Heavy, Enum.FontStyle.Normal);
+								FontFace = Font.new("rbxassetid://16658246179", Enum.FontWeight.Heavy, Enum.FontStyle.Normal);
 								Size = UDim2.fromScale(0, 1);
 								Text = self._dataType;
 								TextColor3 = Color3.fromRGB(70, 70, 70);
@@ -218,7 +218,7 @@ function ResultEntry:Render(props)
 						Name = "label";
 						AnchorPoint = Vector2.new(0.5, 0.5);
 						BackgroundTransparency = 1;
-						FontFace = Font.new("rbxasset://fonts/families/Inconsolata.json", Enum.FontWeight.Heavy, Enum.FontStyle.Normal);
+						FontFace = Font.new("rbxassetid://16658246179", Enum.FontWeight.Heavy, Enum.FontStyle.Normal);
 						Position = UDim2.fromScale(0.5, 0.5);
 						Size = UDim2.fromScale(1, 1);
 						TextColor3 = Color3.fromRGB(255, 255, 255);

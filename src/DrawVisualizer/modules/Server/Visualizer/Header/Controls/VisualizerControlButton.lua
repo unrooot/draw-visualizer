@@ -128,15 +128,29 @@ function VisualizerControlButton:Render(props)
 				end);
 
 				[Blend.Children] = {
-					UIPaddingUtils.fromUDim(UDim.new(0, 15));
+					-- UIPaddingUtils.fromUDim(UDim.new(0, 15));
 
 					Blend.New "TextLabel" {
+						Name = "label";
+						AnchorPoint = Vector2.new(0.5, 0.5);
 						BackgroundTransparency = 1;
 						FontFace = Font.new("rbxassetid://16658246179", Enum.FontWeight.Medium, Enum.FontStyle.Normal);
-						Size = UDim2.fromScale(1, 1);
+						Position = UDim2.fromScale(0.5, 0.5);
 						Text = self._text;
 						TextScaled = true;
 						TextTransparency = transparency;
+
+						Size = Blend.Computed(self._text, function(text)
+							-- @TODO: maybe dont do this
+							-- hacky way to make the text scale at the same
+							-- proportion... slightly cursed, probably will
+							-- break when localized
+							if text == "view properties" then
+								return UDim2.fromScale(0.8, 0.35);
+							else
+								return UDim2.fromScale(0.693, 0.35);
+							end
+						end);
 
 						TextColor3 = Blend.Computed(self._text, props.RootInstance, function(text, instance)
 							if text == "choose target" then

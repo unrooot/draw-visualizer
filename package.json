@@ -30,5 +30,8 @@
         "@quenty/steputils": "^3.4.0",
         "@quenty/table": "^3.5.0",
         "@quenty/uiobjectutils": "^6.3.0"
+    },
+    "override": {
+        "@quenty/loader": "10.2.0",
     }
 }

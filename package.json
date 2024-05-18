@@ -19,7 +19,7 @@
         "@quenty/color3utils": "^11.3.0",
         "@quenty/fzy": "^5.3.0",
         "@quenty/instanceutils": "^13.3.0",
-        "@quenty/loader": "^10.3.0",
+        "@quenty/loader": "10.2.0",
         "@quenty/maid": "^3.2.0",
         "@quenty/math": "^2.7.0",
         "@quenty/observablecollection": "^12.3.0",

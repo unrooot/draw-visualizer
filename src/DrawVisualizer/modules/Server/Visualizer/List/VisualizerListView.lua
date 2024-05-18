@@ -151,8 +151,8 @@ function VisualizerListView:Render(props)
 
 				[Blend.Children] = {
 					Blend.New "UIPadding" {
-						PaddingTop = UDim.new(0, 10);
-						PaddingBottom = UDim.new(0, 10);
+						PaddingTop = UDim.new(0, 3);
+						PaddingBottom = UDim.new(0, 3);
 					};
 
 					Blend.New "UIListLayout" {

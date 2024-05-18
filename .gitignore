@@ -6,3 +6,4 @@ roblox.yml
 .env
 build
 .DS_STORE
+package-lock.json

@@ -1,16 +1,14 @@
 local require = require(script.Parent.loader).load(script)
 
+local ChangeHistoryService = game:GetService("ChangeHistoryService")
 local StudioService = game:GetService("StudioService")
 local UserInputService = game:GetService("UserInputService")
 
 local BasicPane = require("BasicPane")
 local BasicPaneUtils = require("BasicPaneUtils")
 local Blend = require("Blend")
-local Brio = require("Brio")
 local ButtonHighlightModel = require("ButtonHighlightModel")
-local Observable = require("Observable")
 local Rx = require("Rx")
-local RxBrioUtils = require("RxBrioUtils")
 local RxInstanceUtils = require("RxInstanceUtils")
 local Signal = require("Signal")
 local ValueObject = require("ValueObject")
@@ -47,7 +45,6 @@ function VisualizerInstanceEntry.new()
 	end))
 
 	self.Activated = self._maid:Add(Signal.new())
-	self.InstanceHovered = self._maid:Add(Signal.new())
 	self.InstanceInspected = self._maid:Add(Signal.new())
 	self.InstancePicked = self._maid:Add(Signal.new())
 
@@ -57,8 +54,6 @@ function VisualizerInstanceEntry.new()
 		if not isHighlighted then
 			self:SetIsPressed(false)
 		end
-
-		self.InstanceHovered:Fire(isHighlighted)
 	end))
 
 	self._maid:GiveTask(self.VisibleChanged:Connect(function(isVisible)
@@ -66,6 +61,10 @@ function VisualizerInstanceEntry.new()
 	end))
 
 	return self
+end
+
+function VisualizerInstanceEntry:ObserveHovered()
+	return self._buttonModel:ObserveIsHighlighted()
 end
 
 function VisualizerInstanceEntry:GetDepth()
@@ -92,8 +91,32 @@ function VisualizerInstanceEntry:SetIsPressed(isPressed: boolean)
 	self._buttonModel:SetKeyDown(isPressed)
 end
 
-function VisualizerInstanceEntry:SetIsHighlighted(isHighlighted: boolean)
-	self._buttonModel._isHighlighted.Value = isHighlighted
+function VisualizerInstanceEntry:ToggleVisible()
+	local instance = self.Instance.Value
+
+	if not instance then
+		return
+	end
+
+	local function getRecording()
+		local recording = ChangeHistoryService:TryBeginRecording("Toggle visibility")
+		if not recording then
+			warn("[VisualizerInstanceEntry.ToggleVisible] - Failed to start history recording!")
+			return
+		end
+
+		return recording
+	end
+
+	if instance:IsA("GuiObject") then
+		local recording = getRecording()
+		instance.Visible = not instance.Visible
+		ChangeHistoryService:FinishRecording(recording, Enum.FinishRecordingOperation.Commit)
+	elseif instance:IsA("UIStroke") or instance:IsA("UIGradient") then
+		local recording = getRecording()
+		instance.Enabled = not instance.Enabled
+		ChangeHistoryService:FinishRecording(recording, Enum.FinishRecordingOperation.Commit)
+	end
 end
 
 function VisualizerInstanceEntry:Render(props)
@@ -122,10 +145,25 @@ function VisualizerInstanceEntry:Render(props)
 				return #instance:GetDescendants()
 			end
 
+			local hiddenPropertyName
+
+			if instance:IsA("GuiObject") then
+				hiddenPropertyName = "Visible"
+			elseif instance:IsA("UIStroke") or instance:IsA("UIGradient") then
+				hiddenPropertyName = "Enabled"
+			end
+
 			return Rx.combineLatest({
 				AbsoluteSize = instance:IsA("GuiObject") and RxInstanceUtils.observeProperty(instance, "AbsoluteSize") or nil;
 				ClassName = Rx.of(instance.ClassName);
 				Name = RxInstanceUtils.observeProperty(instance, "Name");
+
+				IsHidden = hiddenPropertyName and RxInstanceUtils.observeProperty(instance, hiddenPropertyName):Pipe({
+					Rx.map(function(value)
+						return not value
+					end);
+				}) or nil;
+
 				DescendantCount = Rx.merge({
 					Rx.of(getDescendantCount());
 					Rx.fromSignal(instance.DescendantAdded):Pipe({
@@ -140,6 +178,10 @@ function VisualizerInstanceEntry:Render(props)
 			})
 		end)
 	})
+
+	local rootInstanceHidden = Blend.Computed(instanceData, function(data)
+		return data.IsHidden
+	end);
 
 	return Blend.New "Frame" {
 		Name = "VisualizerInstanceEntry";
@@ -212,7 +254,6 @@ function VisualizerInstanceEntry:Render(props)
 							Blend.New "ImageLabel" {
 								Name = "icon";
 								BackgroundTransparency = 1;
-								ImageTransparency = transparency;
 								LayoutOrder = 1;
 								ScaleType = Enum.ScaleType.Slice;
 								Size = UDim2.fromScale(1, 1);
@@ -228,6 +269,10 @@ function VisualizerInstanceEntry:Render(props)
 
 								ImageRectSize = Blend.Computed(self._iconData, function(data)
 									return data.ImageRectSize or Vector2.new()
+								end);
+
+								ImageTransparency = Blend.Computed(transparency, rootInstanceHidden, function(percent, isHidden)
+									return percent + (isHidden and 0.75 or 0)
 								end);
 
 								[Blend.Children] = {
@@ -250,10 +295,13 @@ function VisualizerInstanceEntry:Render(props)
 								TextSize = 16;
 								RichText = true;
 								Size = UDim2.fromScale(0, 1);
-								TextTransparency = transparency;
 								TextXAlignment = Enum.TextXAlignment.Left;
 
-								Text = Blend.Computed(instanceData, function(data)
+								TextTransparency = Blend.Computed(transparency, rootInstanceHidden, function(percent, isHidden)
+									return percent + (isHidden and 0.75 or 0)
+								end);
+
+								Text = Blend.Computed(instanceData, self._buttonModel:ObserveIsHighlighted(), function(data, isHighlighted)
 									local name = data.Name
 									local descendantCount = data.DescendantCount
 									local absoluteSize = data.AbsoluteSize
@@ -265,7 +313,14 @@ function VisualizerInstanceEntry:Render(props)
 									end
 
 									if absoluteSize then
-										local x, y = math.round(absoluteSize.X), math.round(absoluteSize.Y)
+										local x, y = absoluteSize.X, absoluteSize.Y
+
+										if isHighlighted then
+											x, y = math.floor(x * 1000 + 0.5) / 1000, math.floor(y * 1000 + 0.5) / 1000
+										else
+											x, y = math.floor(x), math.floor(y)
+										end
+
 										text ..= ` <font color="#c59cf2" family="rbxassetid://16658246179" size="14">[{x} x {y}]</font>`
 									end
 
@@ -321,31 +376,74 @@ function VisualizerInstanceEntry:Render(props)
 						end;
 					};
 
-					Blend.New "ImageLabel" {
-						Name = "dropdown";
-						AnchorPoint = Vector2.new(1, 0.5);
+					Blend.New "Frame" {
+						Name = "state";
+						Position = UDim2.fromScale(1, 0);
+						AnchorPoint = Vector2.new(1, 0);
+						Size = UDim2.fromScale(0.2, 1);
 						BackgroundTransparency = 1;
-						Image = "rbxassetid://6031091004";
-						ImageColor3 = Color3.new(1, 1, 1);
-						Position = UDim2.fromScale(1, 0.5);
-						Size = UDim2.fromScale(1, 1);
-						ZIndex = 5;
-
-						ImageTransparency = Blend.Computed(transparency, percentCollapsed, percentHighlighted, function(percent, percentCollapse, percentHighlight)
-							return 0.7 - ((1 - percentCollapse) * 0.4) - (percentHighlight * 0.3) + percent
-						end);
-
-						Rotation = Blend.Computed(percentCollapsed, function(percent: number)
-							return percent * 180
-						end);
-
-						Visible = Blend.Computed(self._descendantCount, function(count: number)
-							return count > 0
-						end);
 
 						[Blend.Children] = {
-							Blend.New "UIAspectRatioConstraint" {
-								AspectRatio = 1;
+							Blend.New "UIListLayout" {
+								FillDirection = Enum.FillDirection.Horizontal;
+								HorizontalAlignment = Enum.HorizontalAlignment.Right;
+								VerticalAlignment = Enum.VerticalAlignment.Center;
+							};
+
+							Blend.New "ImageLabel" {
+								Name = "hidden";
+								AnchorPoint = Vector2.new(1, 0.5);
+								BackgroundTransparency = 1;
+								Image = "rbxassetid://17528808931";
+								ImageColor3 = Color3.fromRGB(65, 65, 65);
+								ImageTransparency = transparency;
+								LayoutOrder = -1;
+								Position = UDim2.fromScale(0.938, 0.5);
+								Size = UDim2.fromScale(1, 1);
+								ZIndex = 5;
+
+								Visible = Blend.Computed(rootInstanceHidden, function(isHidden)
+									return isHidden
+								end);
+
+								[Blend.Children] = {
+									Blend.New "UIAspectRatioConstraint" {
+										AspectRatio = 1;
+									};
+								};
+							};
+
+							Blend.New "Frame" {
+								Name = "dropdown";
+								BackgroundTransparency = 1;
+								Size = UDim2.fromScale(1, 1);
+
+								Visible = Blend.Computed(self._descendantCount, function(count: number)
+									return count > 0
+								end);
+
+								Blend.New "UIAspectRatioConstraint" {
+									AspectRatio = 1;
+								};
+
+								Blend.New "ImageLabel" {
+									Name = "icon";
+									AnchorPoint = Vector2.new(1, 0.5);
+									BackgroundTransparency = 1;
+									Image = "rbxassetid://6031091004";
+									ImageColor3 = Color3.new(1, 1, 1);
+									Position = UDim2.fromScale(1, 0.5);
+									Size = UDim2.fromScale(1, 1);
+									ZIndex = 5;
+
+									ImageTransparency = Blend.Computed(transparency, percentCollapsed, percentHighlighted, function(percent, percentCollapse, percentHighlight)
+										return 0.7 - ((1 - percentCollapse) * 0.4) - (percentHighlight * 0.3) + percent
+									end);
+
+									Rotation = Blend.Computed(percentCollapsed, function(percent: number)
+										return percent * 180
+									end);
+								};
 							};
 						};
 					};
@@ -355,20 +453,32 @@ function VisualizerInstanceEntry:Render(props)
 			Blend.New "Frame" {
 				Name = "tab";
 				AnchorPoint = Vector2.new(0, 0.5);
-				BackgroundColor3 = Color3.fromRGB(200, 200, 200);
 				Position = UDim2.fromScale(0, 0.5);
+
+				BackgroundColor3 = Blend.Computed(rootInstanceHidden, function(isHidden)
+					if isHidden then
+						return Color3.fromRGB(0, 0, 0);
+					else
+						return Color3.fromRGB(200, 200, 200);
+					end
+				end);
 
 				BackgroundTransparency = Blend.Computed(
 					transparency,
 					percentHighlighted,
 					percentCollapsed,
 					self._descendantCount,
-					function(percent, percentHighlight, percentCollapse, count)
+					rootInstanceHidden,
+					function(percent, percentHighlight, percentCollapse, count, isHidden)
 						if count == 0 then
 							return 1
 						end
 
-						return 0.85 - (percentHighlight * 0.65) - ((1 - percentCollapse) * 0.2) + percent
+						if isHidden then
+							percentHighlight *= 0.02
+						end
+
+						return 0.85 - (percentHighlight * 0.65) - ((1 - percentCollapse) * 0.4) + percent - (isHidden and 0.3 or 0)
 					end
 				);
 
@@ -384,8 +494,16 @@ function VisualizerInstanceEntry:Render(props)
 				Size = UDim2.fromScale(1, 1);
 				ZIndex = 2;
 
-				BackgroundTransparency = Blend.Computed(percentHighlighted, function(percent)
-					return 1 - (0.1 * percent)
+				BackgroundColor3 = Blend.Computed(rootInstanceHidden, function(isHidden)
+					if isHidden then
+						return Color3.fromRGB(0, 0, 0);
+					else
+						return Color3.new(1, 1, 1);
+					end
+				end);
+
+				BackgroundTransparency = Blend.Computed(percentHighlighted, rootInstanceHidden, function(percent, isHidden)
+					return 1 - ((isHidden and 0.4 or 0.1) * percent)
 				end);
 			};
 		};

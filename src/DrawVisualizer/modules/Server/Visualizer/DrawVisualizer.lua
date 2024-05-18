@@ -11,6 +11,8 @@ local Blend = require("Blend")
 local Maid = require("Maid")
 local PlayerGuiUtils = require("PlayerGuiUtils")
 local Rx = require("Rx")
+local SpringObject = require("SpringObject")
+local UIPaddingUtils = require("UIPaddingUtils")
 local ValueObject = require("ValueObject")
 local VisualizerHeader = require("VisualizerHeader")
 local VisualizerListView = require("VisualizerListView")
@@ -24,10 +26,13 @@ function DrawVisualizer.new(isHoarcekat: boolean)
 
 	self:_createScreenGui()
 
+	self._maid._flash = Maid.new()
+	self._flashMap = {}
+
 	self._absoluteSize = self._maid:Add(ValueObject.new(Vector2.new()))
 	self._currentObjects = self._maid:Add(ValueObject.new(nil))
 	self._isFocused = self._maid:Add(ValueObject.new(false))
-	self._objectIndex = self._maid:Add(ValueObject.new(0))
+	self._objectIndex = self._maid:Add(ValueObject.new(1))
 	self._propertiesVisible = self._maid:Add(ValueObject.new(false))
 	self._rootInstance = self._maid:Add(ValueObject.new(nil))
 	self._targetSearchEnabled = self._maid:Add(ValueObject.new(false))
@@ -54,12 +59,15 @@ function DrawVisualizer.new(isHoarcekat: boolean)
 
 	self._maid:GiveTask(self._targetSearchEnabled.Changed:Connect(function()
 		local isEnabled = self._targetSearchEnabled.Value
+
+		self._objectIndex.Value = 1
+
 		if self._targetButton then
 			self._targetButton:SetIsChoosen(isEnabled)
 
 			if not isEnabled then
 				self:SetTargetSearchEnabled(false)
-				self._maid._flash = nil
+				self:_flashInstances()
 			end
 		end
 	end))
@@ -69,25 +77,32 @@ function DrawVisualizer.new(isHoarcekat: boolean)
 			return
 		end
 
-		self:_flashInstance(self._rootInstance.Value)
+		self:_flashInstances(self._rootInstance.Value)
 	end))
 
 	self._maid:GiveTask(self._hoverTarget.Changed:Connect(function()
-		self:_flashInstance(self._hoverTarget.Value)
+		if self._currentObjects.Value then
+			self:_flashInstances(self._currentObjects.Value)
+		else
+			self:_flashInstances(self._hoverTarget.Value, 0)
+		end
 	end))
 
 	self._maid:GiveTask(self._currentObjects:Observe():Subscribe(function(objects)
+		local index = self._objectIndex.Value
+
 		if not objects then
-			self._objectIndex.Value = 0
-			return
-		elseif self._objectIndex.Value == 0 then
 			self._objectIndex.Value = 1
+			self._hoverTarget.Value = nil
+			self:_flashInstances(nil)
+			return
 		end
 
-		local index = self._objectIndex.Value
 		if objects[index] then
 			self._hoverTarget.Value = objects[index]
 		end
+
+		self:_flashInstances(objects)
 	end))
 
 	self._header = self._maid:Add(VisualizerHeader.new())
@@ -114,7 +129,7 @@ function DrawVisualizer.new(isHoarcekat: boolean)
 	end))
 
 	self._maid:GiveTask(self._list.InstanceHovered:Connect(function(instance: Instance?)
-		self:_flashInstance(instance)
+		self:_flashInstances(instance)
 	end))
 
 	self._maid:GiveTask(self.VisibleChanged:Connect(function(isVisible, doNotAnimate)
@@ -175,7 +190,7 @@ function DrawVisualizer:Render(props)
 	return Blend.New "Frame" {
 		Name = "DrawVisualizer";
 		Parent = props.Parent;
-		BackgroundColor3 = Color3.fromRGB(39, 39, 39);
+		BackgroundColor3 = Color3.fromRGB(40, 40, 40);
 		BackgroundTransparency = transparency;
 		Size = UDim2.fromScale(1, 1);
 
@@ -196,6 +211,7 @@ function DrawVisualizer:Render(props)
 						AbsoluteRootSize = self._absoluteSize;
 						IsFocused = self._isFocused;
 						RootInstance = self._rootInstance;
+						TargetSearchEnabled = self._targetSearchEnabled;
 						Parent = props.Parent;
 					});
 
@@ -205,6 +221,28 @@ function DrawVisualizer:Render(props)
 						Parent = props.Parent;
 					})
 				};
+			};
+
+			Blend.New "Frame" {
+				Name = "properties";
+				BackgroundTransparency = 1;
+				Size = UDim2.fromScale(1, 1);
+
+				Position = Blend.Computed(percentPropertiesVisible, function(percent)
+					return UDim2.fromScale(1 - percent, 0)
+				end);
+
+				[Blend.Instance] = function(properties)
+					self._properties = properties
+				end;
+
+				-- UIPaddingUtils.fromUDim(UDim.new(0, 25));
+
+				[Blend.OnEvent "InputBegan"] = function(input)
+					if input.KeyCode == Enum.KeyCode.Escape then
+						self._propertiesVisible.Value = false
+					end
+				end;
 			};
 		};
 	};
@@ -226,7 +264,7 @@ function DrawVisualizer:_selectTarget(ctrlPressed: boolean)
 	end
 
 	self._targetSearchEnabled.Value = false
-	self._maid._flash = nil
+	self:_flashInstances()
 end
 
 function DrawVisualizer:_updateTarget()
@@ -251,59 +289,205 @@ function DrawVisualizer:_updateTarget()
 	end
 end
 
-function DrawVisualizer:_flashInstance(instance: GuiObject?)
-	if not instance then
-		if self._maid._flash then
-			self._maid._flash = nil
+function DrawVisualizer:_flashInstances(instances: { GuiObject? })
+	if not instances then
+		for instance, maid in self._flashMap do
+			maid:Destroy()
+			self._flashMap[instance] = nil
 		end
 
 		return
-	elseif not instance:IsA("GuiObject") then
-		return
 	end
 
-	local flashMaid = Maid.new()
+	if typeof(instances) == "Instance" then
+		instances = { instances }
+	end
 
-	local flashTarget = ValueObject.new(0)
-	flashMaid:GiveTask(flashTarget)
+	local flashed = {}
 
-	local percentFlash = Blend.Spring(Blend.toPropertyObservable(flashTarget):Pipe({
-		Rx.startWith({1})
-		}), 10, 1)
+	local objectIndex = self._objectIndex.Value
 
-	local position = instance.AbsolutePosition
-	local size = instance.AbsoluteSize
+	for index, instance in instances do
+		if not instance:IsA("GuiObject") then
+			continue
+		end
 
-	local observable = Blend.New "Frame" {
-		BackgroundColor3 = Color3.fromRGB(200, 100, 100);
-		Position = UDim2.fromOffset(position.X, position.Y);
-		Size = UDim2.fromOffset(size.X, size.Y);
+		if self._maid._flash[instance] then
+			flashed[instance] = true
 
-		BackgroundTransparency = Blend.Computed(percentFlash, function(percent)
-			return 1 - (percent * 0.9)
+			self._maid._flash[instance].Depth.Value = index - objectIndex
+
+			continue
+		end
+
+		local flashMaid = Maid.new()
+
+		self._flashMap[instance] = flashMaid
+		flashed[instance] = true
+
+		local flashTarget = flashMaid:Add(ValueObject.new(0.5))
+		local visibleTarget = flashMaid:Add(ValueObject.new(1))
+
+		local percentAlpha = Blend.AccelTween(visibleTarget:Observe(), 400):Pipe({
+			Rx.map(function(percent)
+				return 1 - percent
+			end)
+		})
+
+		local percentFlash = flashMaid:Add(SpringObject.new(flashTarget, 25, 1))
+
+		local position = instance.AbsolutePosition
+		local size = instance.AbsoluteSize
+
+		flashMaid.Depth = ValueObject.new(index)
+		flashMaid:GiveTask(flashMaid.Depth.Changed:Connect(function()
+			percentFlash:Impulse(30)
+		end))
+
+		local color = Blend.Computed(flashMaid.Depth:Observe(), function(depth)
+			if depth % 3 == 0 then
+				return Color3.fromRGB(200, 100, 100)
+			elseif depth % 2 == 0 then
+				return Color3.fromRGB(100, 200, 200)
+			else
+				return Color3.fromRGB(200, 200, 100)
+			end
 		end);
 
-		Parent = self._effects;
-	};
+		local observable = Blend.New "Frame" {
+			Name = "flash";
+			BackgroundColor3 = color;
+			Position = UDim2.fromOffset(position.X, position.Y);
+			Size = UDim2.fromOffset(size.X, size.Y);
+			Parent = self._effects;
 
-	flashMaid:GiveTask(observable:Subscribe())
+			BackgroundTransparency = Blend.Computed(percentFlash, function(percent)
+				return 1 - (percent * 0.4)
+			end);
 
-	self._maid._flash = flashMaid
+			Visible = Blend.Computed(flashMaid.Depth, function(depth)
+				return depth >= 0
+			end);
 
-	flashTarget.Value = 0.3
+			ZIndex = Blend.Computed(flashMaid.Depth, function(depth)
+				return 100 - depth
+			end);
+
+			Blend.New "UIStroke" {
+				Color = color;
+
+				Transparency = Blend.Computed(percentFlash, function(percent)
+					return 1 - (percent * 0.6)
+				end);
+			};
+
+			Blend.New "TextLabel" {
+				Name = "depth";
+				AutomaticSize = Enum.AutomaticSize.XY;
+				BackgroundColor3 = color;
+				FontFace = Font.new("rbxassetid://16658246179", Enum.FontWeight.Bold, Enum.FontStyle.Normal);
+				Position = UDim2.fromOffset(-1, -10);
+				TextColor3 = Color3.fromRGB(255, 255, 255);
+				TextSize = 11;
+				TextStrokeColor3 = Color3.fromRGB(65, 65, 65);
+				TextXAlignment = Enum.TextXAlignment.Left;
+
+				BackgroundTransparency = Blend.Computed(percentAlpha, function(percent)
+					return 1 - (percent * 0.8)
+				end);
+
+				Text = Blend.Computed(flashMaid.Depth, function(depth)
+					return depth
+				end);
+
+				TextTransparency = Blend.Computed(percentAlpha, function(percent)
+					return 1 - (percent * 0.9)
+				end);
+
+				TextStrokeTransparency = Blend.Computed(percentAlpha, function(percent)
+					return 1 - (percent * 0.2)
+				end);
+
+				Visible = Blend.Computed(flashMaid.Depth, function(depth)
+					return depth ~= 0
+				end);
+
+				Blend.New "UIPadding" {
+					PaddingLeft = UDim.new(0, 5);
+					PaddingRight = UDim.new(0, 5);
+				};
+			};
+
+			Blend.New "TextLabel" {
+				Name = "label";
+				AnchorPoint = Vector2.new(1, 0);
+				AutomaticSize = Enum.AutomaticSize.XY;
+				BackgroundColor3 = color;
+				BorderColor3 = Color3.fromRGB(27, 42, 53);
+				FontFace = Font.new("rbxassetid://16658246179", Enum.FontWeight.Bold, Enum.FontStyle.Normal);
+				Position = UDim2.new(1, 1, 1, 0);
+				TextColor3 = Color3.fromRGB(255, 255, 255);
+				TextSize = 11;
+				TextStrokeColor3 = Color3.fromRGB(65, 65, 65);
+				TextXAlignment = Enum.TextXAlignment.Right;
+
+				BackgroundTransparency = Blend.Computed(percentAlpha, function(percent)
+					return 1 - (percent * 0.8)
+				end);
+
+				Text = Blend.Computed(instance, function(guiObject)
+					local size = guiObject.AbsoluteSize
+					local x, y = math.floor(size.X * 10000 + 0.5) / 10000, math.floor(size.Y * 10000 + 0.5) / 10000
+
+					return `{guiObject.Name} - {x}x{y}`
+				end);
+
+				TextTransparency = Blend.Computed(percentAlpha, function(percent)
+					return 1 - (percent * 0.9)
+				end);
+
+				TextStrokeTransparency = Blend.Computed(percentAlpha, function(percent)
+					return 1 - (percent * 0.2)
+				end);
+
+				Blend.New "UIPadding" {
+					PaddingLeft = UDim.new(0, 5);
+					PaddingRight = UDim.new(0, 5);
+				};
+			};
+		}
+
+		flashMaid:GiveTask(observable:Subscribe())
+
+		visibleTarget.Value = 0
+
+		self._maid._flash[instance] = flashMaid
+
+		flashMaid:GiveTask(function()
+			if self._maid._flash then
+				self._maid._flash[instance] = nil
+			end
+		end)
+	end
+
+	for instance, maid in self._flashMap do
+		if not flashed[instance] then
+			maid:Destroy()
+			self._flashMap[instance] = nil
+		end
+	end
 end
 
 function DrawVisualizer:_createScreenGui()
-	local observable = Blend.New "ScreenGui" {
+	self._maid:GiveTask(Blend.New "ScreenGui" {
 		Name = "VisualizerEffects";
-		DisplayOrder = 99999;
+		DisplayOrder = 999;
 		IgnoreGuiInset = true;
 		ZIndexBehavior = Enum.ZIndexBehavior.Sibling;
 		Parent = CoreGui;
-	};
-
-	self._effects = observable
-	self._maid:GiveTask(observable:Subscribe())
+	}:Subscribe(function(screenGui)
+		self._effects = screenGui
+	end));
 end
 
 function DrawVisualizer:_listenForInput()
@@ -342,15 +526,13 @@ function DrawVisualizer:_listenForInput()
 					end
 
 					if objects then
-						if shiftPressed then
+						if not shiftPressed then
 							if objectIndex + 1 <= #objects then
 								self._objectIndex.Value += 1
-							else
-								self._objectIndex.Value = 1
 							end
 						else
-							if objectIndex - 1 <= 0 then
-								self._objectIndex.Value = objectIndex
+							if objectIndex - 1 > 0 then
+								self._objectIndex.Value -= 1
 							end
 						end
 					end

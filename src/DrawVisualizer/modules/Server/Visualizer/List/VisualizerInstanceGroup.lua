@@ -9,6 +9,7 @@ local Brio = require("Brio")
 local Maid = require("Maid")
 local Math = require("Math")
 local Rx = require("Rx")
+local RxBrioUtils = require("RxBrioUtils")
 local RxInstanceUtils = require("RxInstanceUtils")
 local Signal = require("Signal")
 local Table = require("Table")
@@ -53,8 +54,6 @@ function VisualizerInstanceGroup.new(rootInstance: Instance, startingDepth: numb
 	self.InstancePicked = self._maid:Add(Signal.new())
 	self.InstanceInspected = self._maid:Add(Signal.new())
 
-	-- self:SetRootInstance(rootInstance)
-
 	self._maid:GiveTask(self.VisibleChanged:Connect(function(isVisible)
 		self._percentVisibleTarget.Value = isVisible and 1 or 0
 	end))
@@ -93,7 +92,6 @@ function VisualizerInstanceGroup:AddObject(instanceEntry, depth: number)
 		local groupCount = 0
 		local groups = depthBrio:GetValue()
 
-		-- instance = self._rootInstance.Value
 		instance = instanceEntry:GetRootInstance()
 
 		groups.Value[instance] = instanceEntry
@@ -130,19 +128,14 @@ function VisualizerInstanceGroup:AddObject(instanceEntry, depth: number)
 			self.InstanceInspected:Fire(inspectedInstance)
 		end))
 
-		maid:GiveTask(instanceEntry.InstanceHovered:Connect(function(isHovered: boolean)
-			if not isHovered and (instanceEntry ~= self._hoverTarget) then
+		maid:GiveTask(instanceEntry:ObserveHovered():Subscribe(function(isHovered)
+			if not isHovered then
 				if self._hoverTarget and self._hoverTarget == instanceEntry then
 					self._isHovered.Value = false
-					self.InstanceHovered:Fire(nil)
 				end
 
 				return
 			end
-
-			-- if self._hoverTarget and self._hoverTarget ~= instanceEntry then
-			-- 	self._hoverTarget:SetIsHighlighted(false)
-			-- end
 
 			self._hoverTarget = instanceEntry
 
@@ -182,6 +175,8 @@ function VisualizerInstanceGroup:AddObject(instanceEntry, depth: number)
 		instanceEntry.IsRootInstance.Value = instanceEntry == self._rootInstance.Value
 		instanceEntry:SetDepth(depth)
 	end
+
+	return
 end
 
 function VisualizerInstanceGroup:SetLayoutOrder(layoutOrder: number)
@@ -366,12 +361,46 @@ function VisualizerInstanceGroup:Render(props)
 		end)
 	}), 400)
 
+	local rootInstanceHidden = self._rootInstance:Observe():Pipe({
+		Rx.switchMap(function(instance)
+			if not instance then
+				return Rx.of(false)
+			end
+
+			local propertyName
+
+			if instance:IsA("GuiObject") then
+				propertyName = "Visible"
+			elseif instance:IsA("UIStroke") or instance:IsA("UIGradient") then
+				propertyName = "Enabled"
+			end
+
+			if not propertyName then
+				return Rx.of(false)
+			end
+
+			return RxInstanceUtils.observeProperty(instance, propertyName):Pipe({
+				Rx.map(function(visible)
+					return not visible
+				end);
+			})
+		end);
+	});
+
 	return Blend.New "Frame" {
 		Name = "VisualizerInstanceGroup";
 		Parent = props.Parent;
 
 		BackgroundTransparency = Blend.Computed(groupStrokeTransparency, function(percent)
 			return 1 - (percent * 0.04)
+		end);
+
+		BackgroundColor3 = Blend.Computed(rootInstanceHidden, function(isHidden)
+			if isHidden then
+				return Color3.new(0, 0, 0)
+			else
+				return Color3.new(1, 1, 1)
+			end
 		end);
 
 		LayoutOrder = Blend.Computed(self._layoutOrder, function(layoutOrder)
@@ -392,11 +421,13 @@ function VisualizerInstanceGroup:Render(props)
 			if input.KeyCode == Enum.KeyCode.Space then
 				self._rootEntry:SetIsPressed(true)
 			elseif input.KeyCode == Enum.KeyCode.LeftShift then
-				print(self.StartingDepth.Value)
+				-- print(self.StartingDepth.Value)
 			elseif input.KeyCode == Enum.KeyCode.LeftControl then
 				Selection:Set({ self._hoverTarget.Instance.Value })
 			elseif input.KeyCode == Enum.KeyCode.Tab then
 				self.InstanceInspected:Fire(self._hoverTarget.Instance.Value)
+			elseif input.KeyCode == Enum.KeyCode.V then
+				self._hoverTarget:ToggleVisible()
 			end
 		end;
 
@@ -421,11 +452,18 @@ function VisualizerInstanceGroup:Render(props)
 				Size = UDim2.new(1, -6, 1, 0);
 
 				Blend.New "UIStroke" {
-					Color = Color3.new(1, 1, 1);
 					Thickness = 3;
 
-					Transparency = Blend.Computed(groupStrokeTransparency, function(percent)
-						return 1 - (percent * 0.15)
+					Color = Blend.Computed(rootInstanceHidden, function(isHidden)
+						if isHidden then
+							return Color3.new(0, 0, 0);
+						else
+							return Color3.new(1, 1, 1);
+						end
+					end);
+
+					Transparency = Blend.Computed(groupStrokeTransparency, rootInstanceHidden, function(percent, isHidden)
+						return 1 - (percent * (0.35 + (isHidden and 0.15 or 0)))
 					end);
 				};
 			};

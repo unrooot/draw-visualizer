@@ -106,6 +106,7 @@ function VisualizerHeader:Render(props)
 			self._buttons:Render({
 				AbsoluteRootSize = props.AbsoluteRootSize;
 				RootInstance = props.RootInstance;
+				TargetSearchEnabled = props.TargetSearchEnabled;
 				Parent = props.Parent;
 			})
 		};

@@ -443,7 +443,7 @@ function DrawVisualizer:_flashInstances(instances: { GuiObject? })
 				end);
 
 				Visible = Blend.Computed(flashMaid.Depth, function(depth)
-					return depth ~= 0
+					return depth >= 0
 				end);
 
 				Blend.New "UIPadding" {

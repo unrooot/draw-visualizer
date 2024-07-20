@@ -1,3 +1,4 @@
+local RunService = game:GetService("RunService")
 local require = require(script.Parent.loader).load(script)
 
 local BasicPane = require("BasicPane")
@@ -6,7 +7,6 @@ local RxBrioUtils = require("RxBrioUtils")
 local CommandPaletteResults = require("CommandPaletteResults")
 local CommandPaletteSearch = require("CommandPaletteSearch")
 local Fzy = require("Fzy")
-local RobloxApiDump = require("RobloxApiDump")
 local Rx = require("Rx")
 local ValueObject = require("ValueObject")
 
@@ -28,9 +28,6 @@ function CommandPalette.new(targetInstance)
 
 	self._bounds = ValueObject.new(Vector2.new())
 	self._maid:GiveTask(self._bounds)
-
-	self._apiDump = RobloxApiDump.new()
-	self._maid:GiveTask(self._apiDump)
 
 	self._search = CommandPaletteSearch.new()
 	self._search:SetClassName(targetInstance.ClassName)
@@ -59,9 +56,18 @@ function CommandPalette.new(targetInstance)
 
 	self.EscapePressed = self._search.EscapePressed
 
-	self:_promiseClassDump(targetInstance):Then(function(dump)
-		self._results:SetCurrentProperties(self._targetInstance, dump)
-	end)
+	if not RunService:IsRunning() then
+		local RobloxApiDump = require("RobloxApiDump")
+
+		self._apiDump = RobloxApiDump.new()
+		self._maid:GiveTask(self._apiDump)
+
+		self:_promiseClassDump(targetInstance):Then(function(dump)
+			self._results:SetCurrentProperties(self._targetInstance, dump)
+		end)
+	else
+		print("api dump not available!")
+	end
 
 	self._maid:GiveTask(self.VisibleChanged:Connect(function(isVisible)
 		self._search:SetVisible(isVisible)

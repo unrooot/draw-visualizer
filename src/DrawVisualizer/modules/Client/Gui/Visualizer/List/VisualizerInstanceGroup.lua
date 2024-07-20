@@ -176,7 +176,7 @@ function VisualizerInstanceGroup:AddObject(instanceEntry, depth: number)
 		instanceEntry:SetDepth(depth)
 	end
 
-	return
+	return instanceEntry
 end
 
 function VisualizerInstanceGroup:SetLayoutOrder(layoutOrder: number)
@@ -265,6 +265,10 @@ function VisualizerInstanceGroup:_createEntry(instance: Instance)
 	local entry = VisualizerInstanceEntry.new()
 	entry:SetInstance(instance)
 
+	if self:IsVisible() then
+		entry:Show()
+	end
+
 	return entry
 end
 
@@ -323,7 +327,7 @@ function VisualizerInstanceGroup:SetRootInstance(rootInstance)
 				end
 			else
 				if not self._maid[instance] then
-					group:AddObject(self:_createEntry(instance), depth)
+					brio:ToMaid():Add(group:AddObject(self:_createEntry(instance), depth))
 				end
 			end
 		end))

@@ -6,7 +6,6 @@ local Blend = require("Blend")
 local ButtonHighlightModel = require("ButtonHighlightModel")
 local Rx = require("Rx")
 local Signal = require("Signal")
-local UIPaddingUtils = require("UIPaddingUtils")
 local ValueObject = require("ValueObject")
 
 local VisualizerControlButton = setmetatable({}, BasicPane)
@@ -128,8 +127,6 @@ function VisualizerControlButton:Render(props)
 				end);
 
 				[Blend.Children] = {
-					-- UIPaddingUtils.fromUDim(UDim.new(0, 15));
-
 					Blend.New "TextLabel" {
 						Name = "label";
 						AnchorPoint = Vector2.new(0.5, 0.5);

@@ -13,8 +13,8 @@ local Maid = require("Maid")
 local PlayerGuiUtils = require("PlayerGuiUtils")
 local Rx = require("Rx")
 local SpringObject = require("SpringObject")
-local UIPaddingUtils = require("UIPaddingUtils")
 local ValueObject = require("ValueObject")
+local VisualizerConstants = require("VisualizerConstants")
 local VisualizerHeader = require("VisualizerHeader")
 local VisualizerListView = require("VisualizerListView")
 
@@ -270,8 +270,6 @@ function DrawVisualizer:Render(props)
 					self._properties = properties
 				end;
 
-				-- UIPaddingUtils.fromUDim(UDim.new(0, 25));
-
 				[Blend.OnEvent "InputBegan"] = function(input)
 					if input.KeyCode == Enum.KeyCode.Escape then
 						self._propertiesVisible.Value = false
@@ -304,6 +302,7 @@ end
 function DrawVisualizer:_updateTarget()
 	if self._targetSearchEnabled.Value then
 		local location = UserInputService:GetMouseLocation()
+		local x, y = location.X, location.Y
 		local guis = StarterGui
 
 		if RunService:IsRunning() then
@@ -311,9 +310,26 @@ function DrawVisualizer:_updateTarget()
 			if playerGui then
 				guis = playerGui
 			end
+
+			-- Account for topbar in play solo
+			y -= 36
 		end
 
-		guis = guis:GetGuiObjectsAtPosition(location.X, location.Y)
+		guis = guis:GetGuiObjectsAtPosition(x, y)
+
+		if not RunService:IsRunning() then
+			local coreGuis = CoreGui:GetGuiObjectsAtPosition(location.X, location.Y)
+			if coreGuis then
+				for _, instance in coreGuis do
+					local blacklisted = VisualizerConstants.BLACKLISTED_INSTANCES[instance.Parent.Name]
+					if blacklisted and blacklisted == instance.Name then
+						continue
+					end
+
+					table.insert(guis, instance)
+				end
+			end
+		end
 
 		if guis and #guis > 0 then
 			self._currentObjects.Value = guis
@@ -431,7 +447,7 @@ function DrawVisualizer:_flashInstances(instances: { GuiObject? })
 				end);
 
 				Text = Blend.Computed(flashMaid.Depth, function(depth)
-					return depth
+					return `{depth} - {instance.ClassName}`
 				end);
 
 				TextTransparency = Blend.Computed(percentAlpha, function(percent)
@@ -513,15 +529,37 @@ function DrawVisualizer:_flashInstances(instances: { GuiObject? })
 end
 
 function DrawVisualizer:_createScreenGui()
+	local parent = CoreGui
+
+	-- if RunService:IsRunning() then
+	-- 	if RunService:IsStudio() then
+	-- 		parent = self:_getPlayerGui()
+	-- 	end
+	-- end
+
 	self._maid:GiveTask(Blend.New "ScreenGui" {
 		Name = "VisualizerEffects";
-		DisplayOrder = 999;
-		IgnoreGuiInset = true;
+		DisplayOrder = 9999;
+		IgnoreGuiInset = not RunService:IsRunning();
 		ZIndexBehavior = Enum.ZIndexBehavior.Sibling;
-		Parent = CoreGui;
+		Parent = parent;
 	}:Subscribe(function(screenGui)
 		self._effects = screenGui
 	end));
+end
+
+function DrawVisualizer:_getPlayerGui()
+	if not RunService:IsRunning() then
+		return
+	end
+
+	if self._playerGui then
+		return self._playerGui
+	end
+
+	self._playerGui = PlayerGuiUtils.getPlayerGui()
+
+	return self._playerGui
 end
 
 function DrawVisualizer:_listenForInput()

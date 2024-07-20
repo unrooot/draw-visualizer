@@ -29,5 +29,12 @@ return {
 				end
 			end
 		}
-	}
+	};
+
+	-- Instances that should be ignored by the plugin selection. Key is the
+	-- parent name, value is the instance name.
+	BLACKLISTED_INSTANCES = {
+		["RobloxGui"] = "ControlFrame"; -- Hoarcekat preview frame
+		["VisualizerEffects"] = "flash"; -- Draw visualizer highlights
+	};
 }

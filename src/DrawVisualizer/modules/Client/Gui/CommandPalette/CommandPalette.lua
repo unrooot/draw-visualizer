@@ -65,8 +65,6 @@ function CommandPalette.new(targetInstance)
 		self:_promiseClassDump(targetInstance):Then(function(dump)
 			self._results:SetCurrentProperties(self._targetInstance, dump)
 		end)
-	else
-		print("api dump not available!")
 	end
 
 	self._maid:GiveTask(self.VisibleChanged:Connect(function(isVisible)

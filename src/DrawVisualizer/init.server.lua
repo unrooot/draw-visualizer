@@ -3,14 +3,19 @@ local loader = script.Parent:FindFirstChild("LoaderUtils", true).Parent
 
 local require = require(loader).bootstrapPlugin(modules)
 
+local RunService = game:GetService("RunService")
+
+local Blend = require("Blend")
 local Maid = require("Maid")
-local DrawVisualizer = require("DrawVisualizer")
 local VisualizerConstants = require("VisualizerConstants")
 
 local currentPane
+local isInGame = RunService:IsRunning() and RunService:IsClient()
 
 local function renderPane(target)
 	local maid = Maid.new()
+
+	local DrawVisualizer = require("DrawVisualizer")
 
 	local pane = DrawVisualizer.new()
 	maid:GiveTask(pane)
@@ -61,11 +66,14 @@ local function initialize(plugin)
 	)
 
 	local info = DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Right, false, false, 0, 0)
+	local target
 
-	local target = plugin:CreateDockWidgetPluginGui(VisualizerConstants.PLUGIN_NAME, info)
-	target.Name = VisualizerConstants.PLUGIN_NAME
-	target.Title = VisualizerConstants.PLUGIN_NAME
-	target.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	if not isInGame then
+		target = plugin:CreateDockWidgetPluginGui(VisualizerConstants.PLUGIN_NAME, info)
+		target.Name = VisualizerConstants.PLUGIN_NAME
+		target.Title = VisualizerConstants.PLUGIN_NAME
+		target.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	end
 
 	local function update()
 		local isEnabled = target.Enabled
@@ -78,13 +86,16 @@ local function initialize(plugin)
 			currentPane = pane
 			maid._current = paneMaid
 
-			paneMaid:GiveTask(target.WindowFocused:Connect(function()
-				pane:SetIsFocused(true)
-			end))
+			if isInGame then
+			else
+				paneMaid:GiveTask(target.WindowFocused:Connect(function()
+					pane:SetIsFocused(true)
+				end))
 
-			paneMaid:GiveTask(target.WindowFocusReleased:Connect(function()
-				pane:SetIsFocused(false)
-			end))
+				paneMaid:GiveTask(target.WindowFocusReleased:Connect(function()
+					pane:SetIsFocused(false)
+				end))
+			end
 
 			paneMaid:GiveTask(pane:ObserveRootInstance():Subscribe(function(instance)
 				if not instance then

@@ -72,6 +72,12 @@ function DrawVisualizer.new(isHoarcekat: boolean)
 				self:_flashInstances()
 			end
 		end
+
+		if not isEnabled then
+			if self._maid._flash then
+				self._maid._flash:Destroy()
+			end
+		end
 	end))
 
 	self._maid:GiveTask(self._rootInstance.Changed:Connect(function()
@@ -351,12 +357,15 @@ function DrawVisualizer:_flashInstances(instances: { GuiObject? })
 		return
 	end
 
+	if not self._maid._flash then
+		self._maid._flash = Maid.new()
+	end
+
 	if typeof(instances) == "Instance" then
 		instances = { instances }
 	end
 
 	local flashed = {}
-
 	local objectIndex = self._objectIndex.Value
 
 	for depth, instance in instances do

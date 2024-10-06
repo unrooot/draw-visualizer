@@ -29,6 +29,8 @@ function DrawVisualizer.new(isHoarcekat: boolean)
 
 	self._maid._flash = Maid.new()
 	self._flashMap = {}
+	self._overlappingPositions = {}
+	self._overlapIgnore = {}
 
 	self._absoluteSize = self._maid:Add(ValueObject.new(Vector2.new()))
 	self._currentObjects = self._maid:Add(ValueObject.new(nil))
@@ -70,12 +72,18 @@ function DrawVisualizer.new(isHoarcekat: boolean)
 				self:_flashInstances()
 			end
 		end
+
+		if not isEnabled then
+			if self._maid._flash then
+				self._maid._flash:Destroy()
+			end
+		end
 	end))
 
 	self._maid:GiveTask(self._rootInstance.Changed:Connect(function()
-		if not self._rootInstance.Value then
-			return
-		end
+		-- if not self._rootInstance.Value then
+		-- 	return
+		-- end
 
 		self:_flashInstances(self._rootInstance.Value)
 	end))
@@ -84,7 +92,7 @@ function DrawVisualizer.new(isHoarcekat: boolean)
 		if self._currentObjects.Value then
 			self:_flashInstances(self._currentObjects.Value)
 		else
-			self:_flashInstances(self._hoverTarget.Value, 0)
+			self:_flashInstances(self._hoverTarget.Value)
 		end
 	end))
 
@@ -143,9 +151,9 @@ function DrawVisualizer.new(isHoarcekat: boolean)
 
 	self:_listenForInput()
 
-	if not isHoarcekat then
-		self:SetTargetSearchEnabled(true)
-	end
+	-- if not isHoarcekat then
+	-- 	self:SetTargetSearchEnabled(true)
+	-- end
 
 	return self
 end
@@ -164,11 +172,6 @@ end
 
 function DrawVisualizer:SetRootInstance(instance: Instance)
 	self._rootInstance.Value = instance
-
-	if not instance then
-		self._maid._current = nil
-		return
-	end
 end
 
 function DrawVisualizer:InspectInstance(instance: Instance?)
@@ -288,7 +291,9 @@ end
 
 function DrawVisualizer:_selectTarget(ctrlPressed: boolean)
 	if self._targetSearchEnabled.Value then
-		self:SetRootInstance(self._hoverTarget.Value)
+		if self:IsVisible() then
+			self:SetRootInstance(self._hoverTarget.Value)
+		end
 
 		if ctrlPressed then
 			Selection:Set({self._hoverTarget.Value})
@@ -317,19 +322,19 @@ function DrawVisualizer:_updateTarget()
 
 		guis = guis:GetGuiObjectsAtPosition(x, y)
 
-		if not RunService:IsRunning() then
-			local coreGuis = CoreGui:GetGuiObjectsAtPosition(location.X, location.Y)
-			if coreGuis then
-				for _, instance in coreGuis do
-					local blacklisted = VisualizerConstants.BLACKLISTED_INSTANCES[instance.Parent.Name]
-					if blacklisted and blacklisted == instance.Name then
-						continue
-					end
+		-- if not RunService:IsRunning() then
+		-- 	local coreGuis = CoreGui:GetGuiObjectsAtPosition(location.X, location.Y)
+		-- 	if coreGuis then
+		-- 		for _, instance in coreGuis do
+		-- 			local blacklisted = VisualizerConstants.BLACKLISTED_INSTANCES[instance.Parent.Name]
+		-- 			if blacklisted and blacklisted == instance.Name then
+		-- 				continue
+		-- 			end
 
-					table.insert(guis, instance)
-				end
-			end
-		end
+		-- 			table.insert(guis, instance)
+		-- 		end
+		-- 	end
+		-- end
 
 		if guis and #guis > 0 then
 			self._currentObjects.Value = guis
@@ -346,7 +351,14 @@ function DrawVisualizer:_flashInstances(instances: { GuiObject? })
 			self._flashMap[instance] = nil
 		end
 
+		self._overlappingPositions = {}
+		self._overlapIgnore = {}
+
 		return
+	end
+
+	if not self._maid._flash then
+		self._maid._flash = Maid.new()
 	end
 
 	if typeof(instances) == "Instance" then
@@ -354,8 +366,31 @@ function DrawVisualizer:_flashInstances(instances: { GuiObject? })
 	end
 
 	local flashed = {}
-
 	local objectIndex = self._objectIndex.Value
+
+	for depth, instance in instances do
+		if not instance:IsA("GuiObject") then
+			continue
+		end
+
+		if self._overlapIgnore[instance] then
+			continue
+		end
+
+		local pos = instance.AbsolutePosition
+		local index = math.round(pos.X) + math.round(pos.Y)
+
+		if not self._overlappingPositions[index] and not self._overlapIgnore[instance] then
+			self._overlappingPositions[index] = {}
+		else
+			local current = self._overlappingPositions[index]
+			if table.find(current, instance) then
+				continue
+			end
+		end
+
+		table.insert(self._overlappingPositions[index], instance)
+	end
 
 	for index, instance in instances do
 		if not instance:IsA("GuiObject") then
@@ -364,7 +399,6 @@ function DrawVisualizer:_flashInstances(instances: { GuiObject? })
 
 		if self._maid._flash[instance] then
 			flashed[instance] = true
-
 			self._maid._flash[instance].Depth.Value = index - objectIndex
 
 			continue
@@ -404,6 +438,18 @@ function DrawVisualizer:_flashInstances(instances: { GuiObject? })
 			end
 		end);
 
+		local transparencyModifier = Blend.Computed(flashMaid.Depth, function(depth)
+			if depth == 0 then
+				return 0
+			elseif depth <= 7 then
+				return 1 - math.sqrt(1/depth)
+			else
+				return 0.7
+			end
+		end)
+
+		local positionIndex = math.round(position.X) + math.round(position.Y)
+
 		local observable = Blend.New "Frame" {
 			Name = "flash";
 			BackgroundColor3 = color;
@@ -411,8 +457,8 @@ function DrawVisualizer:_flashInstances(instances: { GuiObject? })
 			Size = UDim2.fromOffset(size.X, size.Y);
 			Parent = self._effects;
 
-			BackgroundTransparency = Blend.Computed(percentFlash, function(percent)
-				return 1 - (percent * 0.4)
+			BackgroundTransparency = Blend.Computed(percentFlash, transparencyModifier, function(percent, modifier)
+				return 1 - (percent * 0.4) + math.clamp(modifier * 0.5, 0, 0.15)
 			end);
 
 			Visible = Blend.Computed(flashMaid.Depth, function(depth)
@@ -426,8 +472,8 @@ function DrawVisualizer:_flashInstances(instances: { GuiObject? })
 			Blend.New "UIStroke" {
 				Color = color;
 
-				Transparency = Blend.Computed(percentFlash, function(percent)
-					return 1 - (percent * 0.6)
+				Transparency = Blend.Computed(percentFlash, transparencyModifier, function(percent, modifier)
+					return math.clamp(1 - (percent * 0.6) + math.clamp(modifier * 0.5, 0, 0.3), 0, 1)
 				end);
 			};
 
@@ -436,26 +482,50 @@ function DrawVisualizer:_flashInstances(instances: { GuiObject? })
 				AutomaticSize = Enum.AutomaticSize.XY;
 				BackgroundColor3 = color;
 				FontFace = Font.new("rbxassetid://16658246179", Enum.FontWeight.Bold, Enum.FontStyle.Normal);
-				Position = UDim2.fromOffset(-1, -10);
 				TextColor3 = Color3.fromRGB(255, 255, 255);
 				TextSize = 11;
 				TextStrokeColor3 = Color3.fromRGB(65, 65, 65);
 				TextXAlignment = Enum.TextXAlignment.Left;
 
-				BackgroundTransparency = Blend.Computed(percentAlpha, function(percent)
-					return 1 - (percent * 0.8)
+				BackgroundTransparency = Blend.Computed(percentAlpha, transparencyModifier, function(percent, modifier)
+					return 1 - (percent * 0.8) + modifier
+				end);
+
+				Position = Blend.Computed(flashMaid.Depth, self._overlappingPositions[positionIndex], self._targetSearchEnabled, function(depth, overlappingInstances, searchEnabled)
+					local offset
+
+
+					if not searchEnabled then
+						offset = 1
+					elseif overlappingInstances then
+						local overlapIndex = table.find(overlappingInstances, instance)
+						if depth == 0 and not overlapIndex then
+							table.insert(overlappingInstances, 1, instance)
+						elseif depth < 0 and overlapIndex then
+							table.remove(overlappingInstances, overlapIndex)
+							self._overlapIgnore[instance] = true
+						end
+
+						offset = table.find(overlappingInstances, instance)
+					end
+
+					if not offset then
+						offset = 1
+					end
+
+					return UDim2.fromOffset(-1, -10 * offset)
 				end);
 
 				Text = Blend.Computed(flashMaid.Depth, function(depth)
-					return `{depth} - {instance.ClassName}`
+					return `{depth} - {instance.Name}`
 				end);
 
-				TextTransparency = Blend.Computed(percentAlpha, function(percent)
-					return 1 - (percent * 0.9)
+				TextTransparency = Blend.Computed(percentAlpha, transparencyModifier, function(percent, modifier)
+					return 1 - (percent * 0.9) + modifier
 				end);
 
-				TextStrokeTransparency = Blend.Computed(percentAlpha, function(percent)
-					return 1 - (percent * 0.2)
+				TextStrokeTransparency = Blend.Computed(percentAlpha, transparencyModifier, function(percent, modifier)
+					return math.clamp(1 - (percent * 0.2) + modifier, 0, 1)
 				end);
 
 				Visible = Blend.Computed(flashMaid.Depth, function(depth)
@@ -481,23 +551,23 @@ function DrawVisualizer:_flashInstances(instances: { GuiObject? })
 				TextStrokeColor3 = Color3.fromRGB(65, 65, 65);
 				TextXAlignment = Enum.TextXAlignment.Right;
 
-				BackgroundTransparency = Blend.Computed(percentAlpha, function(percent)
-					return 1 - (percent * 0.8)
+				BackgroundTransparency = Blend.Computed(percentAlpha, transparencyModifier, function(percent, modifier)
+					return 1 - (percent * 0.8) + modifier
 				end);
 
 				Text = Blend.Computed(instance, function(guiObject)
 					local size = guiObject.AbsoluteSize
 					local x, y = math.floor(size.X * 10000 + 0.5) / 10000, math.floor(size.Y * 10000 + 0.5) / 10000
 
-					return `{guiObject.Name} - {x}x{y}`
+					return `{guiObject.ClassName} - {x}x{y}`
 				end);
 
-				TextTransparency = Blend.Computed(percentAlpha, function(percent)
-					return 1 - (percent * 0.9)
+				TextTransparency = Blend.Computed(percentAlpha, transparencyModifier, function(percent, modifier)
+					return 1 - (percent * 0.9) + modifier
 				end);
 
-				TextStrokeTransparency = Blend.Computed(percentAlpha, function(percent)
-					return 1 - (percent * 0.2)
+				TextStrokeTransparency = Blend.Computed(percentAlpha, transparencyModifier, function(percent, modifier)
+					return math.clamp(1 - (percent * 0.2) + modifier, 0, 1)
 				end);
 
 				Blend.New "UIPadding" {

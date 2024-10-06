@@ -1,31 +1,26 @@
 local modules = script:WaitForChild("modules")
 local loader = script.Parent:FindFirstChild("LoaderUtils", true).Parent
-
 local require = require(loader).bootstrapPlugin(modules)
 
 local RunService = game:GetService("RunService")
 
 local Blend = require("Blend")
+local DrawVisualizer = require("DrawVisualizer")
 local Maid = require("Maid")
 local VisualizerConstants = require("VisualizerConstants")
 
-local currentPane
 local isInGame = RunService:IsRunning() and RunService:IsClient()
+
+local pane
 
 local function renderPane(target)
 	local maid = Maid.new()
 
-	local DrawVisualizer = require("DrawVisualizer")
-
-	local pane = DrawVisualizer.new()
-	maid:GiveTask(pane)
 	maid:GiveTask(pane:Render({
 		Parent = target;
 	}):Subscribe())
 
-	pane:Show()
-
-	return maid, pane
+	return maid
 end
 
 local function createActions(plugin, target, maid)
@@ -46,7 +41,7 @@ local function createActions(plugin, target, maid)
 			if key == "Toggle" then
 				data.Action(target)
 			else
-				data.Action(currentPane)
+				data.Action(pane)
 			end
 		end))
 	end
@@ -54,6 +49,8 @@ end
 
 local function initialize(plugin)
 	local maid = Maid.new()
+
+	pane = maid:Add(DrawVisualizer.new())
 
 	local pluginIcon = VisualizerConstants.PLUGIN_ICON
 
@@ -81,10 +78,12 @@ local function initialize(plugin)
 		toggleButton:SetActive(isEnabled)
 
 		if isEnabled then
-			local paneMaid, pane = renderPane(target)
+			local paneMaid = renderPane(target)
 
-			currentPane = pane
 			maid._current = paneMaid
+
+			pane:SetTargetSearchEnabled(true)
+			pane:Show()
 
 			if isInGame then
 			else
@@ -111,7 +110,9 @@ local function initialize(plugin)
 				end
 			end))
 		else
-			currentPane = nil
+			pane:SetTargetSearchEnabled(false)
+			pane:SetRootInstance(nil)
+			pane:Hide()
 			maid._current = nil
 		end
 	end

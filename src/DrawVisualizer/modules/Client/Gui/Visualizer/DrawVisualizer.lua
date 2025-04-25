@@ -291,12 +291,12 @@ end
 
 function DrawVisualizer:_selectTarget(ctrlPressed: boolean)
 	if self._targetSearchEnabled.Value then
-		if self:IsVisible() then
-			self:SetRootInstance(self._hoverTarget.Value)
-		end
+		Selection:Set({self._hoverTarget.Value})
 
 		if ctrlPressed then
-			Selection:Set({self._hoverTarget.Value})
+			if self:IsVisible() then
+				self:SetRootInstance(self._hoverTarget.Value)
+			end
 		end
 	end
 

@@ -25,7 +25,7 @@ return {
 			Description = "Enables/disables target selection.",
 			Action = function(pane)
 				if pane then
-					pane:SetTargetSearchEnabled(true)
+					pane:ToggleTargetSearch()
 				end
 			end
 		}

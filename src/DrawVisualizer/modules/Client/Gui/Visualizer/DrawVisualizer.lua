@@ -13,6 +13,7 @@ local Maid = require("Maid")
 local PlayerGuiUtils = require("PlayerGuiUtils")
 local Rx = require("Rx")
 local SpringObject = require("SpringObject")
+local StepUtils = require("StepUtils")
 local ValueObject = require("ValueObject")
 local VisualizerConstants = require("VisualizerConstants")
 local VisualizerHeader = require("VisualizerHeader")
@@ -21,6 +22,24 @@ local VisualizerListView = require("VisualizerListView")
 local DrawVisualizer = setmetatable({}, BasicPane)
 DrawVisualizer.ClassName = "DrawVisualizer"
 DrawVisualizer.__index = DrawVisualizer
+
+local function isSameObjects(objects, otherObjects)
+	if objects == otherObjects then
+		return true
+	end
+
+	if not objects or not otherObjects or #objects ~= #otherObjects then
+		return false
+	end
+
+	for index, instance in objects do
+		if otherObjects[index] ~= instance then
+			return false
+		end
+	end
+
+	return true
+end
 
 function DrawVisualizer.new(isHoarcekat: boolean)
 	local self = setmetatable(BasicPane.new(), DrawVisualizer)
@@ -66,14 +85,12 @@ function DrawVisualizer.new(isHoarcekat: boolean)
 
 		if self._targetButton then
 			self._targetButton:SetIsChoosen(isEnabled)
-
-			if not isEnabled then
-				self:SetTargetSearchEnabled(false)
-				self:_flashInstances()
-			end
 		end
 
 		if not isEnabled then
+			self._currentObjects.Value = nil
+			self:_flashInstances()
+
 			if self._maid._flash then
 				self._maid._flash:Destroy()
 			end
@@ -96,6 +113,10 @@ function DrawVisualizer.new(isHoarcekat: boolean)
 		end
 	end))
 
+	self._maid:GiveTask(Selection.SelectionChanged:Connect(function()
+		self:_queueSelectionCheck()
+	end))
+
 	self._maid:GiveTask(self._currentObjects:Observe():Subscribe(function(objects)
 		local index = self._objectIndex.Value
 
@@ -106,9 +127,10 @@ function DrawVisualizer.new(isHoarcekat: boolean)
 			return
 		end
 
-		if objects[index] then
-			self._hoverTarget.Value = objects[index]
-		end
+		index = math.clamp(index, 1, #objects)
+
+		self._objectIndex.Value = index
+		self._hoverTarget.Value = objects[index]
 
 		self:_flashInstances(objects)
 	end))
@@ -122,7 +144,7 @@ function DrawVisualizer.new(isHoarcekat: boolean)
 				self._targetButton = button
 			end
 
-			self:SetTargetSearchEnabled(not self._targetSearchEnabled.Value)
+			self:ToggleTargetSearch()
 		elseif buttonName == "properties" then
 			self:InspectInstance(self._rootInstance.Value)
 		end
@@ -155,6 +177,8 @@ function DrawVisualizer.new(isHoarcekat: boolean)
 	-- 	self:SetTargetSearchEnabled(true)
 	-- end
 
+	self._initialized = true
+
 	return self
 end
 
@@ -168,6 +192,16 @@ end
 
 function DrawVisualizer:SetTargetSearchEnabled(isEnabled: boolean)
 	self._targetSearchEnabled.Value = isEnabled
+
+	if isEnabled and self._initialized then
+		self._sessionSelection = nil
+
+		self:_updateTarget()
+	end
+end
+
+function DrawVisualizer:ToggleTargetSearch()
+	self:SetTargetSearchEnabled(not self._targetSearchEnabled.Value)
 end
 
 function DrawVisualizer:SetRootInstance(instance: Instance)
@@ -289,13 +323,100 @@ function DrawVisualizer:_moveUpOneParent()
 	end
 end
 
+function DrawVisualizer:_queueSelectionCheck()
+	if self._selectionCheckQueued then
+		return
+	end
+
+	self._selectionCheckQueued = true
+
+	local cancelled = false
+	self._maid._selectionCheck = function()
+		cancelled = true
+	end
+
+	task.defer(function()
+		self._selectionCheckQueued = false
+
+		if cancelled then
+			return
+		end
+
+		if self._sessionSelection and not isSameObjects(self._sessionSelection, Selection:Get()) then
+			self._sessionSelection = nil
+		end
+	end)
+end
+
+function DrawVisualizer:_applySelection(selected: { Instance })
+	Selection:Set(selected)
+
+	-- Studio can clobber the selection immediately after a click, so reassert it
+	local cancelled = false
+	self._maid._applySelection = function()
+		cancelled = true
+	end
+
+	task.defer(function()
+		if cancelled then
+			return
+		end
+
+		Selection:Set(selected)
+	end)
+end
+
+function DrawVisualizer:_toggleSelection(instance: Instance): boolean
+	if instance:IsDescendantOf(CoreGui) then
+		warn(string.format(
+			"[DrawVisualizer]: %s is in CoreGui and cannot be added to the Studio selection",
+			instance:GetFullName()
+		))
+
+		return false
+	end
+
+	local selected = self._sessionSelection
+
+	if not selected then
+		selected = Selection:Get()
+		self._sessionSelection = selected
+	end
+
+	local index = table.find(selected, instance)
+
+	if index then
+		table.remove(selected, index)
+	else
+		table.insert(selected, instance)
+	end
+
+	self:_applySelection(selected)
+
+	return true
+end
+
 function DrawVisualizer:_selectTarget(ctrlPressed: boolean)
 	if self._targetSearchEnabled.Value then
-		Selection:Set({self._hoverTarget.Value})
+		self:_updateTarget()
 
+		local hoverTarget = self._hoverTarget.Value
+
+		-- Ctrl accumulates the Studio selection, so stay in target search to
+		-- let the next click keep adding
 		if ctrlPressed then
+			if hoverTarget then
+				self:_toggleSelection(hoverTarget)
+			end
+
+			return
+		end
+
+		if hoverTarget then
+			Selection:Set({hoverTarget})
+
 			if self:IsVisible() then
-				self:SetRootInstance(self._hoverTarget.Value)
+				self:SetRootInstance(hoverTarget)
 			end
 		end
 	end
@@ -322,26 +443,48 @@ function DrawVisualizer:_updateTarget()
 
 		guis = guis:GetGuiObjectsAtPosition(x, y)
 
-		-- if not RunService:IsRunning() then
-		-- 	local coreGuis = CoreGui:GetGuiObjectsAtPosition(location.X, location.Y)
-		-- 	if coreGuis then
-		-- 		for _, instance in coreGuis do
-		-- 			local blacklisted = VisualizerConstants.BLACKLISTED_INSTANCES[instance.Parent.Name]
-		-- 			if blacklisted and blacklisted == instance.Name then
-		-- 				continue
-		-- 			end
+		if not RunService:IsRunning() then
+			local coreGuis = CoreGui:GetGuiObjectsAtPosition(location.X, location.Y)
+			if coreGuis then
+				for _, instance in coreGuis do
+					-- Don't hit-test our own flash overlays
+					if self._effects and instance:IsDescendantOf(self._effects) then
+						continue
+					end
 
-		-- 			table.insert(guis, instance)
-		-- 		end
-		-- 	end
-		-- end
+					local blacklisted = VisualizerConstants.BLACKLISTED_INSTANCES[instance.Parent.Name]
+					if blacklisted and blacklisted == instance.Name then
+						continue
+					end
+
+					table.insert(guis, instance)
+				end
+			end
+		end
 
 		if guis and #guis > 0 then
+			if isSameObjects(self._currentObjects.Value, guis) then
+				return
+			end
+
 			self._currentObjects.Value = guis
 		else
 			self._currentObjects.Value = nil
 		end
 	end
+end
+
+function DrawVisualizer:_queueUpdateTarget()
+	if self._updateTargetQueued then
+		return
+	end
+
+	self._updateTargetQueued = true
+
+	self._maid._queuedUpdateTarget = StepUtils.onceAtRenderStepped(function()
+		self._updateTargetQueued = false
+		self:_updateTarget()
+	end)
 end
 
 function DrawVisualizer:_flashInstances(instances: { GuiObject? })
@@ -634,38 +777,22 @@ end
 
 function DrawVisualizer:_listenForInput()
 	self._maid:GiveTask(UserInputService.InputBegan:Connect(function(input)
-		local keysPressed = UserInputService:GetKeysPressed()
-
 		if input.UserInputType == Enum.UserInputType.MouseMovement then
-			self:_updateTarget()
+			self:_queueUpdateTarget()
 		elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
-			local ctrlPressed = false
-
-			for _, inputObject in keysPressed do
-				if inputObject.KeyCode == Enum.KeyCode.LeftControl then
-					ctrlPressed = true
-				end
-			end
+			local ctrlPressed = input:IsModifierKeyDown(Enum.ModifierKey.Ctrl)
 
 			self:_selectTarget(ctrlPressed)
 		elseif input.UserInputType == Enum.UserInputType.Keyboard then
 			if input.KeyCode == Enum.KeyCode.Escape then
-				if self._targetSearchEnabled.Value then
-					self._targetSearchEnabled.Value = false
-				elseif self._propertiesVisible.Value then
+				if self._propertiesVisible.Value then
 					self._propertiesVisible.Value = false
 				end
 			elseif input.KeyCode == Enum.KeyCode.Tab then
 				if self._targetSearchEnabled.Value then
 					local objectIndex = self._objectIndex.Value
 					local objects = self._currentObjects.Value
-					local shiftPressed = false
-
-					for _, inputObject in keysPressed do
-						if inputObject.KeyCode == Enum.KeyCode.LeftShift then
-							shiftPressed = true
-						end
-					end
+					local shiftPressed = input:IsModifierKeyDown(Enum.ModifierKey.Shift)
 
 					if objects then
 						if not shiftPressed then
@@ -687,16 +814,13 @@ function DrawVisualizer:_listenForInput()
 
 	self._maid:GiveTask(UserInputService.InputChanged:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseMovement then
-			self:_updateTarget()
-		elseif input.UserInputType == Enum.UserInputType.Keyboard then
-			for _, inputObject in UserInputService:GetKeysPressed() do
-			end
+			self:_queueUpdateTarget()
 		end
 	end))
 
 	self._maid:GiveTask(UserInputService.InputEnded:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseMovement then
-			self:_updateTarget()
+			self:_queueUpdateTarget()
 		end
 	end))
 end

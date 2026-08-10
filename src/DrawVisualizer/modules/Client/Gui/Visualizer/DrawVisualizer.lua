@@ -87,7 +87,21 @@ function DrawVisualizer.new(isHoarcekat: boolean)
 			self._targetButton:SetIsChoosen(isEnabled)
 		end
 
-		if not isEnabled then
+		if isEnabled then
+			if self._plugin then
+				self._plugin:Activate(true)
+			end
+
+			self._maid._targetPoll = RunService.RenderStepped:Connect(function()
+				self:_updateTarget()
+			end)
+		else
+			self._maid._targetPoll = nil
+
+			if self._plugin then
+				self._plugin:Deactivate()
+			end
+
 			self._currentObjects.Value = nil
 			self:_flashInstances()
 
@@ -197,6 +211,19 @@ function DrawVisualizer:SetTargetSearchEnabled(isEnabled: boolean)
 		self._sessionSelection = nil
 
 		self:_updateTarget()
+	end
+end
+
+function DrawVisualizer:SetPlugin(plugin: Plugin?)
+	self._plugin = plugin
+	self._pluginMouse = plugin and plugin:GetMouse() or nil
+
+	if plugin then
+		self._maid._pluginDeactivation = plugin.Deactivation:Connect(function()
+			self:SetTargetSearchEnabled(false)
+		end)
+	else
+		self._maid._pluginDeactivation = nil
 	end
 end
 
@@ -425,40 +452,69 @@ function DrawVisualizer:_selectTarget(ctrlPressed: boolean)
 	self:_flashInstances()
 end
 
-function DrawVisualizer:_updateTarget()
-	if self._targetSearchEnabled.Value then
-		local location = UserInputService:GetMouseLocation()
-		local x, y = location.X, location.Y
-		local guis = StarterGui
+function DrawVisualizer:_getMouseLocations(): { Vector2 }
+	local locations = {}
 
-		if RunService:IsRunning() then
-			local playerGui = PlayerGuiUtils.getPlayerGui()
-			if playerGui then
-				guis = playerGui
-			end
+	if self._pluginMouse and not RunService:IsRunning() then
+		table.insert(locations, Vector2.new(self._pluginMouse.X, self._pluginMouse.Y))
+	end
 
-			-- Account for topbar in play solo
-			y -= 36
+	local inputLocation = UserInputService:GetMouseLocation()
+
+	if locations[1] ~= inputLocation then
+		table.insert(locations, inputLocation)
+	end
+
+	return locations
+end
+
+function DrawVisualizer:_getGuiObjectsAtPosition(location: Vector2): { GuiObject }
+	local x, y = location.X, location.Y
+	local guis = StarterGui
+
+	if RunService:IsRunning() then
+		local playerGui = PlayerGuiUtils.getPlayerGui()
+		if playerGui then
+			guis = playerGui
 		end
 
-		guis = guis:GetGuiObjectsAtPosition(x, y)
+		-- Account for topbar in play solo
+		y -= 36
+	end
 
-		if not RunService:IsRunning() then
-			local coreGuis = CoreGui:GetGuiObjectsAtPosition(location.X, location.Y)
-			if coreGuis then
-				for _, instance in coreGuis do
-					-- Don't hit-test our own flash overlays
-					if self._effects and instance:IsDescendantOf(self._effects) then
-						continue
-					end
+	guis = guis:GetGuiObjectsAtPosition(x, y)
 
-					local blacklisted = VisualizerConstants.BLACKLISTED_INSTANCES[instance.Parent.Name]
-					if blacklisted and blacklisted == instance.Name then
-						continue
-					end
-
-					table.insert(guis, instance)
+	if not RunService:IsRunning() then
+		local coreGuis = CoreGui:GetGuiObjectsAtPosition(x, y)
+		if coreGuis then
+			for _, instance in coreGuis do
+				-- Don't hit-test our own flash overlays
+				if self._effects and instance:IsDescendantOf(self._effects) then
+					continue
 				end
+
+				local blacklisted = VisualizerConstants.BLACKLISTED_INSTANCES[instance.Parent.Name]
+				if blacklisted and blacklisted == instance.Name then
+					continue
+				end
+
+				table.insert(guis, instance)
+			end
+		end
+	end
+
+	return guis
+end
+
+function DrawVisualizer:_updateTarget()
+	if self._targetSearchEnabled.Value then
+		local guis
+
+		for _, location in self:_getMouseLocations() do
+			guis = self:_getGuiObjectsAtPosition(location)
+
+			if #guis > 0 then
+				break
 			end
 		end
 

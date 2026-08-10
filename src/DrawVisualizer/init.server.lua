@@ -51,6 +51,7 @@ local function initialize(plugin)
 	local maid = Maid.new()
 
 	pane = maid:Add(DrawVisualizer.new())
+	pane:SetPlugin(plugin)
 
 	local pluginIcon = VisualizerConstants.PLUGIN_ICON
 
